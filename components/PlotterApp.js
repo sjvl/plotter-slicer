@@ -68,7 +68,7 @@ const PlotterApp = () => {
     };
   
     // Fonction pour convertir un segment de courbe en polyline
-    const bezierToPolyline = (p0, p1, p2, p3) => {
+    const cubicBezierToPolyline = (p0, p1, p2, p3) => {
       // Calcul des distances entre les points de contrôle
       const d1 = Math.hypot(p1.x - p0.x, p1.y - p0.y);
       const d2 = Math.hypot(p2.x - p1.x, p2.y - p1.y);
