@@ -1,4 +1,4 @@
-# plotter slicer for Makelangelo V5
+# plotter slicer
 
 demo : https://plotter-slicer.vercel.app/
 
