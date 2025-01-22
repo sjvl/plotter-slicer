@@ -71,7 +71,16 @@ const PlotterApp = () => {
       // Limiter le scale entre 1 et 10
       const newScale = Math.min(Math.max(prev.scale * scaleFactor, 1), 10);
       
-      // Si le scale n'a pas changé (atteint les limites), ne pas modifier la transformation
+      // Si on atteint scale = 1, réinitialiser complètement la transformation
+      if (newScale === 1) {
+        return {
+          scale: 1,
+          x: 0,
+          y: 0
+        };
+      }
+      
+      // Si le scale n'a pas changé (atteint la limite haute), ne pas modifier la transformation
       if (newScale === prev.scale) return prev;
   
       // Point de référence dans les coordonnées initiales
