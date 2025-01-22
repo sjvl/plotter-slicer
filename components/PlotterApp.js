@@ -595,7 +595,7 @@ const PlotterApp = () => {
     let gcode = [];
     
     // En-tête
-    gcode.push(`;Generated with Makelangelo 7.54.0`);
+    gcode.push(`;Generated with Plotter-slicer`);
     gcode.push(";FLAVOR:Marlin-polargraph");
     gcode.push(`;MINX:${PLOTTER_MIN_X}`);
     gcode.push(`;MINY:${PLOTTER_MIN_Y}`);
@@ -607,8 +607,7 @@ const PlotterApp = () => {
     gcode.push(";End of user gcode");
     gcode.push("G28 X Y");
     gcode.push("M280 P0 S90 T250");
-    gcode.push("M0 Ready black and click");
-  
+    gcode.push("M0 Check pen and click");  
     let isPenDown = false;
     const travelSpeed = 3000;
     const drawSpeed = 3000;
@@ -863,11 +862,15 @@ const PlotterApp = () => {
               Générer GCode
             </button>
           </div>
+
+          {/* <div className="space-y-4 mt-24">
+            <p className="text-xs	mb-0">made for Makelangelo V5</p>
+          </div> */}
         </div>
 
         {/* Prévisualisation */}
-        <div className="border rounded-lg md:col-span-2">
-          <div className="w-full max-h-[calc(100vh-3rem)] bg-gray-100 rounded-lg overflow-hidden">
+        <div className="border rounded-lg md:col-span-2 bg-gray-100">
+          <div className="w-full max-h-[calc(100vh-3rem)] overflow-hidden">
             <svg
               viewBox={`0 0 ${canvas.width} ${canvas.height}`}
               className="w-full h-full bg-gray-100"
