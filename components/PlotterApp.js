@@ -52,6 +52,272 @@ const PlotterApp = () => {
     return { width, height };
   };
 
+  
+
+  ///////////SVG PROCESSING///////////
+  const handleFileUpload = async (event) => {
+    const file = event.target.files[0];
+    if (file && file.name.toLowerCase().endsWith('.svg')) {
+      const text = await file.text();
+
+      // Normaliser le SVG pour convertir toutes les formes en paths
+      const normalizedSvg = normalizeSvgShapes(text);
+      
+      // Créer un DOM temporaire pour analyser le SVG
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(normalizedSvg, 'image/svg+xml');
+      const svgElement = doc.querySelector('svg');
+  
+      // Créer un SVG temporaire dans le DOM pour calculer les dimensions réelles
+      const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      tempSvg.style.position = 'absolute';
+      tempSvg.style.visibility = 'hidden';
+      tempSvg.innerHTML = text.replace(/<svg[^>]*>|<\/svg>/g, '');
+      document.body.appendChild(tempSvg);
+      
+      // Obtenir le viewBox s'il existe
+      let viewBoxBounds = null;
+      const viewBox = svgElement.getAttribute('viewBox');
+      if (viewBox) {
+        const [vbX, vbY, vbWidth, vbHeight] = viewBox.split(' ').map(Number);
+        viewBoxBounds = {
+          minX: vbX,
+          minY: vbY,
+          maxX: vbX + vbWidth,
+          maxY: vbY + vbHeight
+        };
+      }
+      
+      // Calculer les dimensions réelles à partir de tous les éléments
+      const allElements = tempSvg.querySelectorAll('path, rect, polyline');
+      let pathBounds = null;
+      if (allElements.length > 0) {
+        pathBounds = Array.from(allElements).reduce((acc, element) => {
+          const bbox = element.getBBox();
+          return {
+            minX: Math.min(acc.minX, bbox.x),
+            minY: Math.min(acc.minY, bbox.y),
+            maxX: Math.max(acc.maxX, bbox.x + bbox.width),
+            maxY: Math.max(acc.maxY, bbox.y + bbox.height)
+          };
+        }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+      }
+      
+      document.body.removeChild(tempSvg);
+  
+      // Utiliser les bounds du viewBox s'ils existent, sinon ceux des paths, sinon les valeurs par défaut
+      const bounds = viewBoxBounds || pathBounds || {
+        minX: 0,
+        minY: 0,
+        maxX: parseFloat(svgElement.getAttribute('width')) || 100,
+        maxY: parseFloat(svgElement.getAttribute('height')) || 100
+      };
+  
+      // S'assurer que nous avons des dimensions valides
+      const width = Math.max(1, bounds.maxX - bounds.minX);
+      const height = Math.max(1, bounds.maxY - bounds.minY);
+      
+      // console.log('SVG Dimensions calculées:', {
+      //   width,
+      //   height,
+      //   bounds,
+      //   viewBox: svgElement.getAttribute('viewBox'),
+      //   originalWidth: svgElement.getAttribute('width'),
+      //   originalHeight: svgElement.getAttribute('height'),
+      //   pathBounds,
+      //   viewBoxBounds
+      // });
+  
+      // Mettre à jour le SVG content et les dimensions
+      setSvgContent(normalizedSvg);
+      setSvgViewBox({ 
+        width, 
+        height,
+        minX: bounds.minX,
+        minY: bounds.minY
+      });
+    }
+  };
+
+  const calculateSvgTransform = () => {
+    if (!svgViewBox?.width || !svgViewBox?.height) return 'scale(1)';
+    
+    // Zone de dessin disponible sur le papier
+    const drawingArea = calculateDrawingArea();
+    
+    // S'assurer que nous avons des dimensions positives non nulles
+    const svgWidth = Math.max(1, svgViewBox.width);
+    const svgHeight = Math.max(1, svgViewBox.height);
+    
+    // Calcul de l'échelle pour tenir dans la zone de dessin
+    const scale = Math.min(
+      drawingArea.width / svgWidth,
+      drawingArea.height / svgHeight
+    )
+    
+    // Position du papier dans la vue
+    const paperX = (canvas.width - paperConfig.width) / 2;
+    const paperY = (canvas.height - paperConfig.height) / 2;
+    
+    // Position du SVG dans la zone de dessin
+    const translateX = paperX + paperConfig.marginLeft - (svgViewBox.minX * scale) + 
+                      (drawingArea.width - svgWidth * scale) / 2;
+    const translateY = paperY + paperConfig.marginTop - (svgViewBox.minY * scale) + 
+                      (drawingArea.height - svgHeight * scale) / 2;
+    
+    // Vérifier que toutes les valeurs sont des nombres valides
+    if (isNaN(translateX) || isNaN(translateY) || isNaN(scale)) {
+      console.error('Valeurs de transformation invalides:', {
+        translateX,
+        translateY,
+        scale,
+        svgViewBox,
+        drawingArea,
+        paperConfig
+      });
+      return 'scale(1)';
+    }  
+    return `translate(${translateX}, ${translateY}) scale(${scale})`;
+  };
+
+  function normalizeColor(color) {
+    // Base de couleurs de référence avec leurs valeurs RGB
+    const baseColors = {
+      black: [0, 0, 0],
+      white: [255, 255, 255],
+      red: [255, 0, 0],
+      green: [0, 128, 0],
+      blue: [0, 0, 255],
+      yellow: [255, 255, 0],
+      purple: [128, 0, 128],
+      orange: [255, 165, 0],
+      brown: [165, 42, 42],
+      pink: [255, 192, 203],
+      gray: [128, 128, 128],
+      cyan: [0, 255, 255],
+      magenta: [255, 0, 255],
+    };
+  
+    // Fonction interne pour convertir hex en RGB
+    function hexToRgb(hex) {
+      const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+      hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+      
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? [
+        parseInt(result[1], 16),
+        parseInt(result[2], 16),
+        parseInt(result[3], 16)
+      ] : null;
+    }
+  
+    // Fonction interne pour convertir hsl en RGB
+    function hslToRgb(h, s, l) {
+      h /= 360;
+      s /= 100;
+      l /= 100;
+      
+      function hue2rgb(p, q, t) {
+        if (t < 0) t += 1;
+        if (t > 1) t -= 1;
+        if (t < 1/6) return p + (q - p) * 6 * t;
+        if (t < 1/2) return q;
+        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        return p;
+      }
+  
+      let r, g, b;
+      if (s === 0) {
+        r = g = b = l;
+      } else {
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+  
+      return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+    }
+  
+    // Traitement principal
+    try {
+      // Nettoyer l'entrée
+      const normalizedInput = color.toLowerCase().trim();
+  
+      // Si c'est déjà un nom de couleur de base, le retourner
+      if (baseColors.hasOwnProperty(normalizedInput)) {
+        return normalizedInput;
+      }
+  
+      // Convertir la couleur en RGB selon son format
+      let rgb;
+  
+      if (normalizedInput.startsWith('#')) {
+        // Format hexadécimal
+        rgb = hexToRgb(normalizedInput);
+      } 
+      else if (normalizedInput.startsWith('rgb')) {
+        // Format RGB/RGBA
+        const values = normalizedInput.match(/\d+/g);
+        rgb = values ? values.slice(0, 3).map(Number) : null;
+      }
+      else if (normalizedInput.startsWith('hsl')) {
+        // Format HSL/HSLA
+        const values = normalizedInput.match(/\d+/g);
+        if (values) {
+          const [h, s, l] = values.map(Number);
+          rgb = hslToRgb(h, s, l);
+        }
+      }
+  
+      // Si la conversion a échoué, retourner noir par défaut
+      if (!rgb) return 'black';
+  
+      // Trouver la couleur de base la plus proche
+      let closestColor = 'black';
+      let minDistance = Infinity;
+  
+      for (const [name, values] of Object.entries(baseColors)) {
+        const distance = Math.sqrt(
+          Math.pow(rgb[0] - values[0], 2) +
+          Math.pow(rgb[1] - values[1], 2) +
+          Math.pow(rgb[2] - values[2], 2)
+        );
+  
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestColor = name;
+        }
+      }
+  
+      return closestColor;
+    } catch (error) {
+      console.warn('Color normalization failed:', error);
+      return 'black'; // Valeur par défaut en cas d'erreur
+    }
+  }
+
+  function getStrokeColor(element) {
+    // Vérifier d'abord le style inline
+    const style = element.getAttribute('style');
+    if (style) {
+      const strokeMatch = style.match(/stroke:\s*([^;]+)/);
+      if (strokeMatch) return normalizeColor(strokeMatch[1]);
+    }
+    
+    // Ensuite vérifier l'attribut stroke
+    const stroke = element.getAttribute('stroke');
+    if (stroke) return normalizeColor(stroke);
+    
+    // Si pas de stroke mais un fill, utiliser le fill
+    const fill = element.getAttribute('fill');
+    if (fill && fill !== 'none') return normalizeColor(fill);
+    
+    // Par défaut, noir
+    return 'black';
+  }
+
   const normalizeSvgShapes = (svgContent) => {
     // Créer un DOM temporaire pour manipuler le SVG
     const parser = new DOMParser();
@@ -299,6 +565,7 @@ const PlotterApp = () => {
         
         // console.log('Nouveau path:', newPath); // Pour debug
         path.setAttribute('d', newPath);
+        path.setAttribute('data-color', getStrokeColor(path));
       }
     });
   
@@ -313,6 +580,7 @@ const PlotterApp = () => {
       
       // Ajouter le L final pour revenir au point de départ
       path.setAttribute('d', `M ${x} ${y} L ${x + width} ${y} L ${x + width} ${y + height} L ${x} ${y + height} L ${x} ${y}`);
+      path.setAttribute('data-color', getStrokeColor(rect));
       
       // Copier les attributs...
       Array.from(rect.attributes).forEach(attr => {
@@ -355,6 +623,7 @@ const PlotterApp = () => {
       
       // Utiliser la fonction pour générer le chemin
       path.setAttribute('d', circleToPath(cx, cy, r));
+      path.setAttribute('data-color', getStrokeColor(circle));
       
       // Copier les autres attributs
       Array.from(circle.attributes).forEach(attr => {
@@ -377,6 +646,7 @@ const PlotterApp = () => {
       
       // Ligne simple : move to (x1,y1) puis line to (x2,y2)
       path.setAttribute('d', `M ${x1} ${y1} L ${x2} ${y2}`);
+      path.setAttribute('data-color', getStrokeColor(line));
       
       // Copier les autres attributs
       Array.from(line.attributes).forEach(attr => {
@@ -411,6 +681,7 @@ const PlotterApp = () => {
       }
       
       path.setAttribute('d', d);
+      path.setAttribute('data-color', getStrokeColor(poly));
       
       // Copier les autres attributs
       Array.from(poly.attributes).forEach(attr => {
@@ -425,132 +696,10 @@ const PlotterApp = () => {
     // Retourner le SVG complet, pas juste son contenu
     return svg.outerHTML;
   };
-  
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (file && file.name.toLowerCase().endsWith('.svg')) {
-      const text = await file.text();
+  ///////////SVG PROCESSING///////////
 
-      // Normaliser le SVG pour convertir toutes les formes en paths
-      const normalizedSvg = normalizeSvgShapes(text);
-      
-      // Créer un DOM temporaire pour analyser le SVG
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(normalizedSvg, 'image/svg+xml');
-      const svgElement = doc.querySelector('svg');
-  
-      // Créer un SVG temporaire dans le DOM pour calculer les dimensions réelles
-      const tempSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-      tempSvg.style.position = 'absolute';
-      tempSvg.style.visibility = 'hidden';
-      tempSvg.innerHTML = text.replace(/<svg[^>]*>|<\/svg>/g, '');
-      document.body.appendChild(tempSvg);
-      
-      // Obtenir le viewBox s'il existe
-      let viewBoxBounds = null;
-      const viewBox = svgElement.getAttribute('viewBox');
-      if (viewBox) {
-        const [vbX, vbY, vbWidth, vbHeight] = viewBox.split(' ').map(Number);
-        viewBoxBounds = {
-          minX: vbX,
-          minY: vbY,
-          maxX: vbX + vbWidth,
-          maxY: vbY + vbHeight
-        };
-      }
-      
-      // Calculer les dimensions réelles à partir de tous les éléments
-      const allElements = tempSvg.querySelectorAll('path, rect, polyline');
-      let pathBounds = null;
-      if (allElements.length > 0) {
-        pathBounds = Array.from(allElements).reduce((acc, element) => {
-          const bbox = element.getBBox();
-          return {
-            minX: Math.min(acc.minX, bbox.x),
-            minY: Math.min(acc.minY, bbox.y),
-            maxX: Math.max(acc.maxX, bbox.x + bbox.width),
-            maxY: Math.max(acc.maxY, bbox.y + bbox.height)
-          };
-        }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
-      }
-      
-      document.body.removeChild(tempSvg);
-  
-      // Utiliser les bounds du viewBox s'ils existent, sinon ceux des paths, sinon les valeurs par défaut
-      const bounds = viewBoxBounds || pathBounds || {
-        minX: 0,
-        minY: 0,
-        maxX: parseFloat(svgElement.getAttribute('width')) || 100,
-        maxY: parseFloat(svgElement.getAttribute('height')) || 100
-      };
-  
-      // S'assurer que nous avons des dimensions valides
-      const width = Math.max(1, bounds.maxX - bounds.minX);
-      const height = Math.max(1, bounds.maxY - bounds.minY);
-      
-      // console.log('SVG Dimensions calculées:', {
-      //   width,
-      //   height,
-      //   bounds,
-      //   viewBox: svgElement.getAttribute('viewBox'),
-      //   originalWidth: svgElement.getAttribute('width'),
-      //   originalHeight: svgElement.getAttribute('height'),
-      //   pathBounds,
-      //   viewBoxBounds
-      // });
-  
-      // Mettre à jour le SVG content et les dimensions
-      setSvgContent(normalizedSvg);
-      setSvgViewBox({ 
-        width, 
-        height,
-        minX: bounds.minX,
-        minY: bounds.minY
-      });
-    }
-  };
-  
-  const calculateSvgTransform = () => {
-    if (!svgViewBox?.width || !svgViewBox?.height) return 'scale(1)';
-    
-    // Zone de dessin disponible sur le papier
-    const drawingArea = calculateDrawingArea();
-    
-    // S'assurer que nous avons des dimensions positives non nulles
-    const svgWidth = Math.max(1, svgViewBox.width);
-    const svgHeight = Math.max(1, svgViewBox.height);
-    
-    // Calcul de l'échelle pour tenir dans la zone de dessin
-    const scale = Math.min(
-      drawingArea.width / svgWidth,
-      drawingArea.height / svgHeight
-    )
-    
-    // Position du papier dans la vue
-    const paperX = (canvas.width - paperConfig.width) / 2;
-    const paperY = (canvas.height - paperConfig.height) / 2;
-    
-    // Position du SVG dans la zone de dessin
-    const translateX = paperX + paperConfig.marginLeft - (svgViewBox.minX * scale) + 
-                      (drawingArea.width - svgWidth * scale) / 2;
-    const translateY = paperY + paperConfig.marginTop - (svgViewBox.minY * scale) + 
-                      (drawingArea.height - svgHeight * scale) / 2;
-    
-    // Vérifier que toutes les valeurs sont des nombres valides
-    if (isNaN(translateX) || isNaN(translateY) || isNaN(scale)) {
-      console.error('Valeurs de transformation invalides:', {
-        translateX,
-        translateY,
-        scale,
-        svgViewBox,
-        drawingArea,
-        paperConfig
-      });
-      return 'scale(1)';
-    }  
-    return `translate(${translateX}, ${translateY}) scale(${scale})`;
-  };
 
+  ///////////GCODE GENERATION///////////
   const transformCoord = ({ x, y, scale, drawingArea, svgViewBox, paperConfig, machineConfig }) => {
     // D'abord, appliquer la mise à l'échelle au SVG
     const scaledX = (x - svgViewBox.minX) * scale;
@@ -591,111 +740,124 @@ const PlotterApp = () => {
       drawingArea.width / svgViewBox.width,
       drawingArea.height / svgViewBox.height
     );
-  
-    let gcode = [];
-    
-    // En-tête
-    gcode.push(`;Generated with Plotter-slicer`);
-    gcode.push(";FLAVOR:Marlin-polargraph");
-    gcode.push(`;MINX:${PLOTTER_MIN_X}`);
-    gcode.push(`;MINY:${PLOTTER_MIN_Y}`);
-    gcode.push(`;MAXX:${PLOTTER_MAX_X}`);
-    gcode.push(`;MAXY:${PLOTTER_MAX_Y}`);
-    gcode.push(`; ${new Date().toLocaleString('fr-FR')}`);
-    gcode.push(";Start of user gcode");
-    gcode.push("");
-    gcode.push(";End of user gcode");
-    gcode.push("G28 X Y");
-    gcode.push("M280 P0 S90 T250");
-    gcode.push("M0 Check pen and click");  
-    let isPenDown = false;
-    const travelSpeed = 3000;
-    const drawSpeed = 3000;
-    
-    // Traiter chaque path
+
+    // Regrouper les paths par couleur
+    const pathsByColor = {};
     doc.querySelectorAll('path').forEach(path => {
-      const pathData = path.getAttribute('d')
-        .replace(/,/g, ' ')     // Remplacer les virgules par des espaces
-        .replace(/\s+/g, ' ')   // Normaliser les espaces
-        .trim()                 // Retirer les espaces aux extrémités
-        .split(/(?=[ML])/);     // Séparer uniquement sur M et L
+      // Lire directement la couleur du stroke et la normaliser
+      const stroke = path.getAttribute('stroke');
+      const color = stroke ? normalizeColor(stroke) : 'black';
       
-      pathData.forEach(cmd => {
-        const type = cmd.trim()[0];
-        const numbers = cmd.slice(1).trim().split(/\s+/).map(Number);
-        
-        if (numbers.length >= 2) {
-          const point = transformCoord({
-            x: numbers[0],
-            y: numbers[1],
-            scale,
-            drawingArea,
-            svgViewBox,
-            paperConfig,
-            machineConfig
-          });
+      if (!pathsByColor[color]) {
+        pathsByColor[color] = [];
+      }
+      pathsByColor[color].push(path);
+    });
   
-          if (type === 'M') {
-            if (isPenDown) {
-              gcode.push('M280 P0 S90 T250'); // Pen up
-              isPenDown = false;
+    // Générer un gcode pour chaque couleur
+    const gcodeByColor = {};
+    
+    Object.entries(pathsByColor).forEach(([color, paths]) => {
+      let gcode = [];
+      
+      // En-tête
+      gcode.push(`;Generated with Plotter-slicer`);
+      gcode.push(";FLAVOR:Marlin-polargraph");
+      gcode.push(`;MINX:${PLOTTER_MIN_X}`);
+      gcode.push(`;MINY:${PLOTTER_MIN_Y}`);
+      gcode.push(`;MAXX:${PLOTTER_MAX_X}`);
+      gcode.push(`;MAXY:${PLOTTER_MAX_Y}`);
+      gcode.push(`; ${new Date().toLocaleString('fr-FR')}`);
+      gcode.push(";Start of user gcode");
+      gcode.push("");
+      gcode.push(";End of user gcode");
+      gcode.push("G28 X Y");
+      gcode.push("M280 P0 S90 T250");
+      gcode.push(`M0 ${color} pen and click`);
+      let isPenDown = false;
+      const travelSpeed = 3000;
+      const drawSpeed = 3000;
+      
+      // Traiter les paths de cette couleur
+      paths.forEach(path => {
+        const pathData = path.getAttribute('d')
+          .replace(/,/g, ' ')     // Remplacer les virgules par des espaces
+          .replace(/\s+/g, ' ')   // Normaliser les espaces
+          .trim()                 // Retirer les espaces aux extrémités
+          .split(/(?=[ML])/);     // Séparer uniquement sur M et L
+        
+        pathData.forEach(cmd => {
+          const type = cmd.trim()[0];
+          const numbers = cmd.slice(1).trim().split(/\s+/).map(Number);
+          
+          if (numbers.length >= 2) {
+            const point = transformCoord({
+              x: numbers[0],
+              y: numbers[1],
+              scale,
+              drawingArea,
+              svgViewBox,
+              paperConfig,
+              machineConfig
+            });
+    
+            if (type === 'M') {
+              if (isPenDown) {
+                gcode.push('M280 P0 S90 T250'); // Pen up
+                isPenDown = false;
+              }
+              gcode.push(`G0 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${travelSpeed}`);
+            } else if (type === 'L') {
+              if (!isPenDown) {
+                gcode.push('M280 P0 S25 T150'); // Pen down
+                isPenDown = true;
+              }
+              gcode.push(`G1 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${drawSpeed}`);
             }
-            gcode.push(`G0 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${travelSpeed}`);
-          } else if (type === 'L') {
-            if (!isPenDown) {
-              gcode.push('M280 P0 S25 T150'); // Pen down
-              isPenDown = true;
-            }
-            gcode.push(`G1 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${drawSpeed}`);
           }
-        }
+        });
       });
+      
+      if (isPenDown) {
+        gcode.push("M280 P0 S90 T250"); // Pen up
+      }
+      gcode.push("G0 X0 Y0 F3000"); // Return home
+      gcode.push(";End of Gcode");
+      
+      gcodeByColor[color] = gcode.join('\n');
     });
     
-    if (isPenDown) {
-      gcode.push("M280 P0 S90 T250"); // Pen up
-    }
-    gcode.push("G0 X0 Y0 F3000"); // Return home
-    gcode.push(";End of Gcode");
-    
-    return gcode.join('\n');
+    return gcodeByColor;
   };
 
   const handleGenerateGcode = () => {
     if (!svgContent || !svgViewBox) return;
     
-    const gcode = generateGcode(svgContent, paperConfig, svgViewBox, machineConfig);
-    if (!gcode) return;
-
-    setGeneratedGcode(gcode);  // Sauvegarder le GCode pour la prévisualisation
+    const gcodeByColor = generateGcode(svgContent, paperConfig, svgViewBox, machineConfig);
     
-    // Créer le nom du fichier basé sur le fichier SVG d'origine
-    const filename = fileInputRef.current?.files[0]?.name.replace('.svg', '.gcode') || 'output.gcode';
+    // Mettre à jour l'état pour la prévisualisation
+    setGeneratedGcode(gcodeByColor);
     
-    // Créer et télécharger le fichier
-    const blob = new Blob([gcode], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    // Créer un fichier pour chaque couleur
+    Object.entries(gcodeByColor).forEach(([color, gcode]) => {
+      const baseFilename = fileInputRef.current?.files[0]?.name.replace('.svg', '') || 'output';
+      const filename = `${baseFilename}-${color}.gcode`;
+      
+      const blob = new Blob([gcode], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    });
   };
 
   const GCodePreview = ({ gcode }) => {
     if (!gcode) return null;
-    
-    const pathData = gcode.split('\n')
-      .filter(line => line.startsWith('G0 ') || line.startsWith('G1 '))
-      .map(line => {
-        const x = parseFloat(line.match(/X(-?\d+\.?\d*)/)?.[1]);
-        const y = parseFloat(line.match(/Y(-?\d+\.?\d*)/)?.[1]);
-        const isMove = line.startsWith('G0');
-        return { x, y, isMove };
-      });
-  
+
     const plotterToSvg = (x, y) => {
       // Calculer les ratios de correction basés sur les dimensions réelles vs SVG
       const correctionX = PLOTTER_WIDTH / paperConfig.width;
@@ -715,27 +877,51 @@ const PlotterApp = () => {
         y: (canvas.height - paperConfig.height * correctionY) / 2 + paperY
       };
     };
-  
-    let path = '';
-    pathData.forEach((point, i) => {
-      const svgPos = plotterToSvg(point.x, point.y);
-      if (i === 0 || point.isMove) {
-        path += `M ${svgPos.x} ${svgPos.y} `;
-      } else {
-        path += `L ${svgPos.x} ${svgPos.y} `;
-      }
-    });
+
+    const processGCode = (gcodeContent) => {
+      const pathData = gcodeContent.split('\n')
+        .filter(line => line.startsWith('G0 ') || line.startsWith('G1 '))
+        .map(line => {
+          const x = parseFloat(line.match(/X(-?\d+\.?\d*)/)?.[1]);
+          const y = parseFloat(line.match(/Y(-?\d+\.?\d*)/)?.[1]);
+          const isMove = line.startsWith('G0');
+          return { x, y, isMove };
+        });
+
+      let path = '';
+      pathData.forEach((point, i) => {
+        const svgPos = plotterToSvg(point.x, point.y);
+        if (i === 0 || point.isMove) {
+          path += `M ${svgPos.x} ${svgPos.y} `;
+        } else {
+          path += `L ${svgPos.x} ${svgPos.y} `;
+        }
+      });
+
+      return path;
+    };
+
+    // Si c'est une chaîne (ancien format), la convertir en objet avec une seule couleur
+    const gcodeByColor = typeof gcode === 'string' 
+      ? { blue: gcode }  // Garder la couleur bleue par défaut pour la compatibilité
+      : gcode;
   
     return (
-      <path 
-        d={path} 
-        fill="none" 
-        stroke="blue" 
-        strokeWidth="1" 
-        opacity="1"
-      />
+      <>
+        {Object.entries(gcodeByColor).map(([color, colorGcode]) => (
+          <path 
+            key={color}
+            d={processGCode(colorGcode)} 
+            fill="none" 
+            stroke="blue" 
+            strokeWidth="1" 
+            opacity=".6"
+          />
+        ))}
+      </>
     );
-  };
+};
+  ///////////GCODE GENERATION///////////
 
   return (
     <div className="p-4 max-w-screen-xl mx-auto">
@@ -991,7 +1177,9 @@ const PlotterApp = () => {
             )}
 
             {/* prévisualisation du GCode */}
-            {generatedGcode && <GCodePreview gcode={generatedGcode}/>}
+            {generatedGcode && 
+              <GCodePreview gcode={generatedGcode}/>
+            }
             </svg>
           </div>
         </div>
