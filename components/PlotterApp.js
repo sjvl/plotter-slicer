@@ -741,40 +741,48 @@ const PlotterApp = () => {
   return (
     <div className="p-4 max-w-screen-xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
         {/* Panneau de contrôle */}
         <div className="border rounded-lg p-4">
-          <h2 className="text-lg font-bold mb-4">Configuration du papier</h2>
+          <h1 className="text-3xl font-bold mb-4">Plotter slicer</h1>
+          <h2 className="text-lg font-bold mb-4 mt-12">Paper (mm)</h2>
           
           <div className="space-y-4">
-            <div>
-              <label className="block mb-1">Largeur (mm)</label>
-              <input
-                type="number"
-                className="w-full p-2 border rounded"
-                value={paperConfig.width}
-                onChange={(e) => setPaperConfig({
-                  ...paperConfig,
-                  width: Number(e.target.value)
-                })}
-              />
-            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block mb-1">Width</label>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  value={paperConfig.width}
+                  onChange={(e) => setPaperConfig({
+                    ...paperConfig,
+                    width: Number(e.target.value)
+                  })}
+                />
+              </div>
 
-            <div>
-              <label className="block mb-1">Hauteur (mm)</label>
-              <input
-                type="number"
-                className="w-full p-2 border rounded"
-                value={paperConfig.height}
-                onChange={(e) => setPaperConfig({
-                  ...paperConfig,
-                  height: Number(e.target.value)
-                })}
-              />
+              <div>
+                <label className="block mb-1">Height</label>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  value={paperConfig.height}
+                  onChange={(e) => setPaperConfig({
+                    ...paperConfig,
+                    height: Number(e.target.value)
+                  })}
+                />
+              </div>
             </div>
+          </div>
+
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold mb-4 mt-12">Margins (mm)</h2>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block mb-1">Marge Haut</label>
+                <label className="block mb-1">Margin top</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -786,7 +794,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Marge Droite</label>
+                <label className="block mb-1">Margin right</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -798,7 +806,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Marge Bas</label>
+                <label className="block mb-1">Margin bottom</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -810,7 +818,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Marge Gauche</label>
+                <label className="block mb-1">Margin left</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -822,7 +830,11 @@ const PlotterApp = () => {
                 />
               </div>
             </div>
+          </div>
+            
+          <h2 className="text-lg font-bold mb-4 mt-12">Files</h2>
 
+          <div className="space-y-4">
             <div className="space-y-2">
               <button 
                 className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
@@ -855,7 +867,7 @@ const PlotterApp = () => {
 
         {/* Prévisualisation */}
         <div className="border rounded-lg md:col-span-2">
-          <div className="w-full aspect-square bg-gray-100 rounded-lg overflow-hidden">
+          <div className="w-full max-h-[calc(100vh-3rem)] bg-gray-100 rounded-lg overflow-hidden">
             <svg
               viewBox={`0 0 ${canvas.width} ${canvas.height}`}
               className="w-full h-full bg-gray-100"
