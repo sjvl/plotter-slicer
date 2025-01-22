@@ -13,3 +13,11 @@ body {
   box-sizing: border-box;
 }
 
+.preview-container {
+  -ms-content-zooming: none;
+  -ms-touch-action: none;
+  touch-action: none;
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+

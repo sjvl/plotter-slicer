@@ -34,6 +34,77 @@ const PlotterApp = () => {
 
   const [generatedGcode, setGeneratedGcode] = useState(null);
 
+  const [viewTransform, setViewTransform] = useState({
+    scale: 1,
+    x: 0,
+    y: 0
+  });
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    
+    // Obtenir les dimensions du SVG
+    const svgElement = e.currentTarget;
+    const bbox = svgElement.getBoundingClientRect();
+    
+    // Position relative de la souris dans le SVG (en pourcentage)
+    const mouseX = (e.clientX - bbox.left) / bbox.width;
+    const mouseY = (e.clientY - bbox.top) / bbox.height;
+  
+    // Facteur de zoom
+    const scaleFactor = e.deltaY > 0 ? 0.9 : 1.1;
+  
+    setViewTransform(prev => {
+      // Limiter le scale entre 1 et 10
+      const newScale = Math.min(Math.max(prev.scale * scaleFactor, 1), 10);
+      
+      // Si le scale n'a pas changé (atteint les limites), ne pas modifier la transformation
+      if (newScale === prev.scale) return prev;
+  
+      // Point de référence dans les coordonnées initiales
+      const refX = canvas.width * mouseX;
+      const refY = canvas.height * mouseY;
+  
+      // Calculer les nouveaux décalages pour maintenir le point sous la souris
+      const newX = refX - (refX - prev.x) * scaleFactor;
+      const newY = refY - (refY - prev.y) * scaleFactor;
+  
+      return {
+        scale: newScale,
+        x: newX,
+        y: newY
+      };
+    });
+  };
+  
+  // Pour le pan (déplacement), il faudrait aussi :
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  
+  const handleMouseDown = (e) => {
+    if (e.button === 1 || e.button === 0) {  // Clic milieu ou gauche
+      setIsDragging(true);
+      setDragStart({
+        x: e.clientX - viewTransform.x,
+        y: e.clientY - viewTransform.y
+      });
+    }
+  };
+  
+  const handleMouseMove = (e) => {
+    if (isDragging) {
+      setViewTransform(prev => ({
+        ...prev,
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      }));
+    }
+  };
+  
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
 
   useEffect(() => {
     // Reset du gcode quand la config du papier change
@@ -45,6 +116,21 @@ const PlotterApp = () => {
     setGeneratedGcode(null);
   }, [svgContent]);
 
+  useEffect(() => {
+    const preventDefault = (e) => {
+      if (e.ctrlKey) {  // Si c'est un zoom avec Ctrl + molette
+        e.preventDefault();
+      }
+    };
+  
+    // Cibler spécifiquement le conteneur de prévisualisation
+    const container = document.querySelector('.preview-container');
+    container?.addEventListener('wheel', preventDefault, { passive: false });
+  
+    return () => {
+      container?.removeEventListener('wheel', preventDefault);
+    };
+  }, []);
 
   const calculateDrawingArea = () => {
     const width = paperConfig.width - paperConfig.marginLeft - paperConfig.marginRight;
@@ -1056,130 +1142,142 @@ const PlotterApp = () => {
 
         {/* Prévisualisation */}
         <div className="border rounded-lg md:col-span-2 bg-gray-100">
-          <div className="w-full max-h-[calc(100vh-3rem)] overflow-hidden">
-            <svg
-              viewBox={`0 0 ${canvas.width} ${canvas.height}`}
-              className="w-full h-full bg-gray-100"
-            >
-              {/* Zone de dessin totale du plotter */}
-              {/* <rect
-                x={(canvas.width - machineConfig.width) /2}
-                y={(canvas.height - machineConfig.height) /2}
-                width={machineConfig.width}
-                height={machineConfig.height}
-                fill="#d1d1d1"
-                stroke="gray"
-                strokeWidth="0.5"
-              /> */}
+          <div className="w-full max-h-[calc(100vh-3rem)] overflow-hidden preview-container touch-none">
+          <svg
+            viewBox={`0 0 ${canvas.width} ${canvas.height}`}
+            className="w-full h-full bg-gray-100"
+            onWheel={(e) => {
+              e.preventDefault();  // Empêcher le zoom du navigateur
+              handleWheel(e);
+            }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+          >
+            <g transform={`translate(${viewTransform.x} ${viewTransform.y}) scale(${viewTransform.scale})`}>
+                {/* Zone de dessin totale du plotter */}
+                {/* <rect
+                  x={(canvas.width - machineConfig.width) /2}
+                  y={(canvas.height - machineConfig.height) /2}
+                  width={machineConfig.width}
+                  height={machineConfig.height}
+                  fill="#d1d1d1"
+                  stroke="gray"
+                  strokeWidth="0.5"
+                /> */}
 
-              {/* Support machine */}
-              <rect
-                x={(canvas.width - machineConfig.width) /2 -30}
-                y={(canvas.height - 1030) /2 - 30}
-                width={machineConfig.width + 60}
-                height={60}
-                fill="#c9bca1"
-                stroke="grey"
-                strokeWidth="0.5"
-              />
-              
-              {/* Moteurs */}
-              <rect
-                x={(canvas.width - machineConfig.width) /2 -25}
-                y={(canvas.height - 1030) /2 - 25}
-                width={50}
-                height={70}
-                fill="#ab9c7e"
-                stroke="grey"
-                strokeWidth="0.5"
-              />
-              <rect 
-                x={(canvas.width - machineConfig.width) /2 - 15} 
-                y={(canvas.height - machineConfig.height) /2 - 15} 
-                width={30}
-                height={30}
-                fill="black" 
-              />
-              <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
+                {/* Support machine */}
+                <rect
+                  x={(canvas.width - machineConfig.width) /2 -30}
+                  y={(canvas.height - 1030) /2 - 30}
+                  width={machineConfig.width + 60}
+                  height={60}
+                  fill="#c9bca1"
+                  stroke="grey"
+                  strokeWidth="0.5"
+                />
+                
+                {/* Moteurs */}
+                <rect
+                  x={(canvas.width - machineConfig.width) /2 -25}
+                  y={(canvas.height - 1030) /2 - 25}
+                  width={50}
+                  height={70}
+                  fill="#ab9c7e"
+                  stroke="grey"
+                  strokeWidth="0.5"
+                />
+                <rect 
+                  x={(canvas.width - machineConfig.width) /2 - 15} 
+                  y={(canvas.height - machineConfig.height) /2 - 15} 
+                  width={30}
+                  height={30}
+                  fill="black" 
+                />
+                <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
 
-              <rect
-                x={(canvas.width) -248}
-                y={(canvas.height - 1030) /2 - 25}
-                width={50}
-                height={70}
-                fill="#ab9c7e"
-                stroke="grey"
-                strokeWidth="0.5"
-              />
-              <rect 
-                x={canvas.width - (canvas.width - machineConfig.width) /2 - 15} 
-                y={(canvas.height - machineConfig.height) /2 - 15} 
-                width={30}
-                height={30}
-                fill="black" 
-              />
-              <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
-              
-              {/* Ecran + SD */}
-              <rect
-                x={(canvas.width - 210) / 2 - 150}
-                y={(canvas.height - 1030) /2 - 20}
-                width={150}
-                height={40}
-                fill="white"
-                stroke="grey"
-                strokeWidth=".5"
-              />
-              <rect
-                x={(canvas.width - 210) / 2 - 140}
-                y={(canvas.height - 1030) /2 - 15}
-                width={80}
-                height={30}
-                fill="blue"
-                stroke="grey"
-                strokeWidth=".5"
-              />
-              <circle cx={(canvas.width - 210) / 2 - 15} cy={(canvas.height - 1030) /2} r="6" fill="black" />
+                <rect
+                  x={(canvas.width) -248}
+                  y={(canvas.height - 1030) /2 - 25}
+                  width={50}
+                  height={70}
+                  fill="#ab9c7e"
+                  stroke="grey"
+                  strokeWidth="0.5"
+                />
+                <rect 
+                  x={canvas.width - (canvas.width - machineConfig.width) /2 - 15} 
+                  y={(canvas.height - machineConfig.height) /2 - 15} 
+                  width={30}
+                  height={30}
+                  fill="black" 
+                />
+                <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
+                
+                {/* Ecran + SD */}
+                <rect
+                  x={(canvas.width - 210) / 2 - 150}
+                  y={(canvas.height - 1030) /2 - 20}
+                  width={150}
+                  height={40}
+                  fill="white"
+                  stroke="grey"
+                  strokeWidth=".5"
+                />
+                <rect
+                  x={(canvas.width - 210) / 2 - 140}
+                  y={(canvas.height - 1030) /2 - 15}
+                  width={80}
+                  height={30}
+                  fill="blue"
+                  stroke="grey"
+                  strokeWidth=".5"
+                />
+                <circle cx={(canvas.width - 210) / 2 - 15} cy={(canvas.height - 1030) /2} r="6" fill="black" />
 
- 
+  
 
-              {/* Papier centré */}
-              <rect
-                x={(canvas.width - paperConfig.width) / 2}
-                y={(canvas.height - paperConfig.height) / 2}
-                width={paperConfig.width}
-                height={paperConfig.height}
-                fill="white"
-                stroke="black"
-                strokeWidth="1"
-              />
-              
-              {/* Zone de dessin sur le papier */}
-              <rect
-                x={(canvas.width - paperConfig.width) / 2 + paperConfig.marginLeft}
-                y={(canvas.height - paperConfig.height) / 2 + paperConfig.marginTop}
-                width={calculateDrawingArea().width}
-                height={calculateDrawingArea().height}
-                fill="none"
-                stroke="blue"
-                strokeDasharray="5,5"
-                strokeWidth="1"
-              />
+                {/* Papier centré */}
+                <rect
+                  x={(canvas.width - paperConfig.width) / 2}
+                  y={(canvas.height - paperConfig.height) / 2}
+                  width={paperConfig.width}
+                  height={paperConfig.height}
+                  fill="white"
+                  stroke="black"
+                  strokeWidth="1"
+                />
+                
+                {/* Zone de dessin sur le papier */}
+                <rect
+                  x={(canvas.width - paperConfig.width) / 2 + paperConfig.marginLeft}
+                  y={(canvas.height - paperConfig.height) / 2 + paperConfig.marginTop}
+                  width={calculateDrawingArea().width}
+                  height={calculateDrawingArea().height}
+                  fill="none"
+                  stroke="blue"
+                  strokeDasharray="5,5"
+                  strokeWidth=".5"
+                />
 
-            {svgContent && (
-              <g transform={calculateSvgTransform()}>
-                <g dangerouslySetInnerHTML={{ 
-                  __html: svgContent.replace(/<svg[^>]*>|<\/svg>/g, '')
-                    .replace(/width="[^"]*"/g, '')
-                    .replace(/height="[^"]*"/g, '')
-                }} />
-              </g>
-            )}
+              {svgContent && (
+                <g transform={calculateSvgTransform()}>
+                  <g dangerouslySetInnerHTML={{ 
+                    __html: svgContent.replace(/<svg[^>]*>|<\/svg>/g, '')
+                      .replace(/width="[^"]*"/g, '')
+                      .replace(/height="[^"]*"/g, '')
+                  }} />
+                </g>
+              )}
 
-            {/* prévisualisation du GCode */}
-            {generatedGcode && 
-              <GCodePreview gcode={generatedGcode}/>
-            }
+              {/* prévisualisation du GCode */}
+              {generatedGcode && 
+                <GCodePreview gcode={generatedGcode}/>
+              }
+            </g>
+
             </svg>
           </div>
         </div>
