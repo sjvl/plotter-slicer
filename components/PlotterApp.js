@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import SerialConnection from './SerialConnection';
+import { ArrowLeftRight } from 'lucide-react';
 
 // Dimensions réelles du plotter
 const PLOTTER_MIN_X = -126.225;
@@ -34,11 +36,22 @@ const PlotterApp = () => {
 
   const [generatedGcode, setGeneratedGcode] = useState(null);
 
+  const [selectedFormat, setSelectedFormat] = useState('A3');
+  const paperFormats = {
+    'A5': { width: 148, height: 210 },
+    'A4': { width: 210, height: 297 },
+    'A3': { width: 297, height: 420 },
+    'A2': { width: 420, height: 594 },
+    'B2': { width: 500, height: 707 },
+  };
+
   const [viewTransform, setViewTransform] = useState({
     scale: 1,
     x: 0,
     y: 0
   });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const handleWheel = (e) => {
     e.preventDefault();
@@ -77,10 +90,6 @@ const PlotterApp = () => {
     });
   };
   
-  // Pour le pan (déplacement), il faudrait aussi :
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  
   const handleMouseDown = (e) => {
     if (e.button === 1 || e.button === 0) {  // Clic milieu ou gauche
       setIsDragging(true);
@@ -103,6 +112,31 @@ const PlotterApp = () => {
   
   const handleMouseUp = () => {
     setIsDragging(false);
+  };
+
+  // Handler pour le changement de format
+  const handleFormatChange = (format) => {
+    setSelectedFormat(format);
+    setPaperConfig({
+      ...paperConfig,
+      width: paperFormats[format].width,
+      height: paperFormats[format].height
+    });
+  };
+
+  const handleDimensionChange = (dimension, value) => {
+    const newConfig = {
+      ...paperConfig,
+      [dimension]: value
+    };
+    setPaperConfig(newConfig);
+  
+    // Vérifier si les dimensions correspondent à un format standard
+    const formatMatch = Object.entries(paperFormats).find(([_, dims]) => 
+      dims.width === newConfig.width && dims.height === newConfig.height
+    );
+    
+    setSelectedFormat(formatMatch ? formatMatch[0] : 'custom');
   };
 
 
@@ -1015,45 +1049,69 @@ const PlotterApp = () => {
         
         {/* Panneau de contrôle */}
         <div className="border rounded-lg p-4">
-          <h1 className="text-3xl font-bold mb-4">Plotter slicer</h1>
+          <h1 className="text-3xl font-bold">Plotter slicer</h1>
+          <p className="text-xs	mb-4">for Makelangelo 5</p>
+
           <h2 className="text-lg font-bold mb-4 mt-12">Paper (mm)</h2>
-          
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="relative">
+              <label className="text-xs block mb-1">Format</label>
+              <select
+                className="w-full p-2 pr-10 border rounded appearance-none bg-white"
+                value={selectedFormat}
+                onChange={(e) => handleFormatChange(e.target.value)}
+              >
+                <option value="A5">A5 (148×210mm)</option>
+                <option value="A4">A4 (210×297mm)</option>
+                <option value="A3">A3 (297×420mm)</option>
+                <option value="A2">A2 (420×594mm)</option>
+                {selectedFormat === 'custom' && <option value="custom">Custom</option>}
+              </select>
+              <div className="pointer-events-none absolute right-2 top-8">
+                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                </svg>
+              </div>
+            </div>
+            <div className="grid grid-cols-[1fr,auto,1fr] gap-2 items-end">
               <div>
-                <label className="block mb-1">Width</label>
+                <label className="text-xs block mb-1">Width</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
                   value={paperConfig.width}
-                  onChange={(e) => setPaperConfig({
-                    ...paperConfig,
-                    width: Number(e.target.value)
-                  })}
+                  onChange={(e) => handleDimensionChange('width', Number(e.target.value))}
+
                 />
               </div>
-
+              <button 
+              className="p-2 border rounded bg-gray-50 hover:bg-gray-100"
+              onClick={() => setPaperConfig({
+                  ...paperConfig,
+                  width: paperConfig.height,
+                  height: paperConfig.width
+                })}
+              >
+                <ArrowLeftRight size={16} />
+              </button>
               <div>
-                <label className="block mb-1">Height</label>
+                <label className="text-xs block mb-1">Height</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
                   value={paperConfig.height}
-                  onChange={(e) => setPaperConfig({
-                    ...paperConfig,
-                    height: Number(e.target.value)
-                  })}
+                  onChange={(e) => handleDimensionChange('height', Number(e.target.value))}
+
                 />
               </div>
             </div>
-          </div>
+          </div>  
 
+          <h2 className="text-lg font-bold mb-4 mt-8">Margins (mm)</h2>
           <div className="space-y-4">
-            <h2 className="text-lg font-bold mb-4 mt-12">Margins (mm)</h2>
-
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block mb-1">Top</label>
+                <label className="text-xs block mb-1">Top</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -1065,7 +1123,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Right</label>
+                <label className="text-xs block mb-1">Right</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -1077,7 +1135,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Bottom</label>
+                <label className="text-xs block mb-1">Bottom</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -1089,7 +1147,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Left</label>
+                <label className="text-xs block mb-1">Left</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -1103,24 +1161,21 @@ const PlotterApp = () => {
             </div>
           </div>
             
-          <h2 className="text-lg font-bold mb-4 mt-12">Files</h2>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <button 
-                className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Importer SVG
-              </button>
-              <input
-                type="file"
-                ref={fileInputRef}
-                className="hidden"
-                accept=".svg"
-                onChange={handleFileUpload}
-              />
-            </div>
+          {/* <h2 className="text-lg font-bold mb-4 mt-8">Files</h2> */}
+          <div className="space-y-2 mt-12">
+            <button 
+              className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              Importer SVG
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept=".svg"
+              onChange={handleFileUpload}
+            />
 
             <button 
               className={`w-full p-2 rounded ${
@@ -1133,11 +1188,9 @@ const PlotterApp = () => {
             >
               Générer GCode
             </button>
+          
+            {/* <SerialConnection /> */}
           </div>
-
-          {/* <div className="space-y-4 mt-24">
-            <p className="text-xs	mb-0">made for Makelangelo V5</p>
-          </div> */}
         </div>
 
         {/* Prévisualisation */}
@@ -1196,7 +1249,7 @@ const PlotterApp = () => {
                   height={30}
                   fill="black" 
                 />
-                <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
+                <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
 
                 <rect
                   x={(canvas.width) -248}
@@ -1214,7 +1267,7 @@ const PlotterApp = () => {
                   height={30}
                   fill="black" 
                 />
-                <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
+                <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
                 
                 {/* Ecran + SD */}
                 <rect
@@ -1231,7 +1284,7 @@ const PlotterApp = () => {
                   y={(canvas.height - 1030) /2 - 15}
                   width={80}
                   height={30}
-                  fill="blue"
+                  fill="#2463EB"
                   stroke="grey"
                   strokeWidth=".5"
                 />
@@ -1246,7 +1299,7 @@ const PlotterApp = () => {
                   width={paperConfig.width}
                   height={paperConfig.height}
                   fill="white"
-                  stroke="black"
+                  stroke="gray"
                   strokeWidth="1"
                 />
                 
@@ -1279,6 +1332,7 @@ const PlotterApp = () => {
             </g>
 
             </svg>
+
           </div>
         </div>
       </div>
