@@ -781,7 +781,7 @@ const PlotterApp = () => {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="block mb-1">Margin top</label>
+                <label className="block mb-1">Top</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -793,7 +793,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Margin right</label>
+                <label className="block mb-1">Right</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -805,7 +805,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Margin bottom</label>
+                <label className="block mb-1">Bottom</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
@@ -817,7 +817,7 @@ const PlotterApp = () => {
                 />
               </div>
               <div>
-                <label className="block mb-1">Margin left</label>
+                <label className="block mb-1">Left</label>
                 <input
                   type="number"
                   className="w-full p-2 border rounded"
