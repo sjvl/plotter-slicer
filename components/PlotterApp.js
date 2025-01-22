@@ -10,8 +10,8 @@ const PLOTTER_HEIGHT = PLOTTER_MAX_Y - PLOTTER_MIN_Y; // 249.602
 
 const PlotterApp = () => {
   const [paperConfig, setPaperConfig] = useState({
-    width: 210,
-    height: 297,
+    width: 297,
+    height: 420,
     marginTop: 0,
     marginRight: 0,
     marginBottom: 0,
@@ -861,7 +861,7 @@ const PlotterApp = () => {
               className="w-full h-full bg-gray-100"
             >
               {/* Zone de dessin totale du plotter */}
-              <rect
+              {/* <rect
                 x={(canvas.width - machineConfig.width) /2}
                 y={(canvas.height - machineConfig.height) /2}
                 width={machineConfig.width}
@@ -869,9 +869,9 @@ const PlotterApp = () => {
                 fill="#d1d1d1"
                 stroke="gray"
                 strokeWidth="0.5"
-              />
+              /> */}
 
-              {/* Moteurs (en haut) */}
+              {/* Support machine */}
               <rect
                 x={(canvas.width - machineConfig.width) /2 -30}
                 y={(canvas.height - 1030) /2 - 30}
@@ -881,8 +881,45 @@ const PlotterApp = () => {
                 stroke="grey"
                 strokeWidth="0.5"
               />
-              <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="15" fill="black" />
-              <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="15" fill="black" />
+              
+              {/* Moteurs */}
+              <rect
+                x={(canvas.width - machineConfig.width) /2 -25}
+                y={(canvas.height - 1030) /2 - 25}
+                width={50}
+                height={70}
+                fill="#ab9c7e"
+                stroke="grey"
+                strokeWidth="0.5"
+              />
+              <rect 
+                x={(canvas.width - machineConfig.width) /2 - 15} 
+                y={(canvas.height - machineConfig.height) /2 - 15} 
+                width={30}
+                height={30}
+                fill="black" 
+              />
+              <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
+
+              <rect
+                x={(canvas.width) -248}
+                y={(canvas.height - 1030) /2 - 25}
+                width={50}
+                height={70}
+                fill="#ab9c7e"
+                stroke="grey"
+                strokeWidth="0.5"
+              />
+              <rect 
+                x={canvas.width - (canvas.width - machineConfig.width) /2 - 15} 
+                y={(canvas.height - machineConfig.height) /2 - 15} 
+                width={30}
+                height={30}
+                fill="black" 
+              />
+              <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="blue" />
+              
+              {/* Ecran + SD */}
               <rect
                 x={(canvas.width - 210) / 2 - 150}
                 y={(canvas.height - 1030) /2 - 20}
@@ -901,6 +938,8 @@ const PlotterApp = () => {
                 stroke="grey"
                 strokeWidth=".5"
               />
+              <circle cx={(canvas.width - 210) / 2 - 15} cy={(canvas.height - 1030) /2} r="6" fill="black" />
+
  
 
               {/* Papier centré */}
