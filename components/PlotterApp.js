@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 // Dimensions réelles du plotter
 const PLOTTER_MIN_X = -126.225;
@@ -34,6 +34,16 @@ const PlotterApp = () => {
 
   const [generatedGcode, setGeneratedGcode] = useState(null);
 
+
+  useEffect(() => {
+    // Reset du gcode quand la config du papier change
+    setGeneratedGcode(null);
+  }, [paperConfig]); 
+  
+  useEffect(() => {
+    // Reset du gcode quand le SVG change
+    setGeneratedGcode(null);
+  }, [svgContent]);
 
 
   const calculateDrawingArea = () => {
@@ -537,8 +547,7 @@ const PlotterApp = () => {
         paperConfig
       });
       return 'scale(1)';
-    }
-  
+    }  
     return `translate(${translateX}, ${translateY}) scale(${scale})`;
   };
 
@@ -689,14 +698,22 @@ const PlotterApp = () => {
       });
   
     const plotterToSvg = (x, y) => {
-      // Convertir de coordonnées plotter vers coordonnées papier
-      const paperX = ((x - PLOTTER_MIN_X) / PLOTTER_WIDTH) * paperConfig.width;
-      const paperY = ((PLOTTER_MAX_Y - y) / PLOTTER_HEIGHT) * paperConfig.height;
+      // Calculer les ratios de correction basés sur les dimensions réelles vs SVG
+      const correctionX = PLOTTER_WIDTH / paperConfig.width;
+      const correctionY = PLOTTER_HEIGHT / paperConfig.height;
+    
+      // D'abord, convertir en position relative (0-1) sur le plotter
+      const relativeX = (x - PLOTTER_MIN_X) / PLOTTER_WIDTH;
+      const relativeY = (PLOTTER_MAX_Y - y) / PLOTTER_HEIGHT;
+    
+      // Appliquer la correction et convertir aux dimensions du papier
+      const paperX = relativeX * paperConfig.width * correctionX;
+      const paperY = relativeY * paperConfig.height * correctionY;
       
       // Positionner dans le viewport comme le papier
       return {
-        x: (canvas.width - paperConfig.width) / 2 + paperX ,
-        y: (canvas.height - paperConfig.height) / 2 + paperY 
+        x: (canvas.width - paperConfig.width * correctionX) / 2 + paperX,
+        y: (canvas.height - paperConfig.height * correctionY) / 2 + paperY
       };
     };
   
@@ -714,9 +731,9 @@ const PlotterApp = () => {
       <path 
         d={path} 
         fill="none" 
-        stroke="red" 
+        stroke="blue" 
         strokeWidth="1" 
-        opacity="0.5"
+        opacity="1"
       />
     );
   };
@@ -920,7 +937,7 @@ const PlotterApp = () => {
             )}
 
             {/* prévisualisation du GCode */}
-            {/* {generatedGcode && <GCodePreview gcode={generatedGcode} />} */}
+            {generatedGcode && <GCodePreview gcode={generatedGcode}/>}
             </svg>
           </div>
         </div>
