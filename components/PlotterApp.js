@@ -915,36 +915,42 @@ const PlotterApp = () => {
           .trim()                 // Retirer les espaces aux extrémités
           .split(/(?=[ML])/);     // Séparer uniquement sur M et L
         
-        pathData.forEach(cmd => {
-          const type = cmd.trim()[0];
-          const numbers = cmd.slice(1).trim().split(/\s+/).map(Number);
-          
-          if (numbers.length >= 2) {
-            const point = transformCoord({
-              x: numbers[0],
-              y: numbers[1],
-              scale,
-              drawingArea,
-              svgViewBox,
-              paperConfig,
-              machineConfig
-            });
-    
-            if (type === 'M') {
-              if (isPenDown) {
-                gcode.push('M280 P0 S90 T250'); // Pen up
-                isPenDown = false;
+          pathData.forEach(cmd => {
+            const type = cmd.trim()[0];
+            // Diviser tous les nombres en paires
+            const coords = cmd.slice(1).trim().split(/\s+/).map(Number);
+            
+            // Traiter les nombres deux par deux
+            for (let i = 0; i < coords.length; i += 2) {
+              if (i + 1 < coords.length) { // Vérifier qu'on a bien une paire de coordonnées
+                const point = transformCoord({
+                  x: coords[i],
+                  y: coords[i+1],
+                  scale,
+                  drawingArea,
+                  svgViewBox,
+                  paperConfig,
+                  machineConfig
+                });
+                
+                if (type === 'M' && i === 0) {
+                  // Premier point d'un segment M
+                  if (isPenDown) {
+                    gcode.push('M280 P0 S90 T250'); // Pen up
+                    isPenDown = false;
+                  }
+                  gcode.push(`G0 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${travelSpeed}`);
+                } else {
+                  // Tous les autres points sont des lignes
+                  if (!isPenDown) {
+                    gcode.push('M280 P0 S25 T150'); // Pen down
+                    isPenDown = true;
+                  }
+                  gcode.push(`G1 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${drawSpeed}`);
+                }
               }
-              gcode.push(`G0 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${travelSpeed}`);
-            } else if (type === 'L') {
-              if (!isPenDown) {
-                gcode.push('M280 P0 S25 T150'); // Pen down
-                isPenDown = true;
-              }
-              gcode.push(`G1 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${drawSpeed}`);
             }
-          }
-        });
+          });
       });
       
       if (isPenDown) {
@@ -1059,7 +1065,7 @@ const PlotterApp = () => {
         {/* Panneau de contrôle */}
         <div className="border rounded-lg p-4">
           <h1 className="text-3xl font-bold">Plotter slicer</h1>
-          <p className="text-xs	mb-4">for Makelangelo 5</p>
+          <p className="text-xs	mb-4">for <a href="https://www.marginallyclever.com/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">Makelangelo 5</a> by <a href="https://sjvl.notion.site/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">sjvl</a></p>
 
           <h2 className="text-lg font-bold mb-4 mt-12">Paper (mm)</h2>
           <div className="space-y-4">
