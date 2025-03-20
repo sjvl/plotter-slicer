@@ -35,6 +35,8 @@ const PlotterApp = () => {
   const fileInputRef = useRef(null);
 
   const [generatedGcode, setGeneratedGcode] = useState(null);
+  const [timeEstimations, setTimeEstimations] = useState({});
+
 
   const [selectedFormat, setSelectedFormat] = useState('A3');
   const paperFormats = {
@@ -52,6 +54,20 @@ const PlotterApp = () => {
   });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const [speedSettings, setSpeedSettings] = useState({
+    travelSpeed: 3000,  // acceleration
+  });
+
+  const handleSpeedChange = (type, value) => {
+    setSpeedSettings(prev => ({
+      ...prev,
+      [type]: Number(value)
+    }));
+
+    // Réinitialiser le gcode généré lorsque les paramètres changent
+    setGeneratedGcode(null);
+  };
 
   const handleWheel = (e) => {
     e.preventDefault();
@@ -854,6 +870,158 @@ const PlotterApp = () => {
     };
   };
 
+  const calculateDrawTime = (gcodeContent, travelSpeed) => {
+    // Convertir mm/min en mm/s pour faciliter le calcul
+    const travelSpeedMmSec = travelSpeed / 60;
+    
+    // Variables pour le calcul
+    let travelDistance = 0;
+    let drawDistance = 0;
+    let lastX = 0, lastY = 0;
+    let isPenDown = false;
+    let penUpDownCount = 0;
+    
+    // Temps pour les opérations du stylo (en secondes)
+    const penMoveTime = .8;  // 1 seconde pour lever ou baisser le stylo
+    
+    // Facteur d'ajustement empirique
+    const adjustmentFactor = 0.00007 * travelSpeed + 0.79;  // 15% de plus que le calcul théorique
+    console.log(adjustmentFactor)
+    
+    // Paramètres d'accélération (mm/s²)
+    const acceleration = 800;  // Valeur typique pour un plotter
+    
+    // Fonction pour calculer le temps avec accélération
+    const calculateTimeWithAcceleration = (distance, speed, isDrawing) => {
+      // Vitesse en mm/s
+      const v = travelSpeedMmSec;
+      
+      // Pour les très petits déplacements, l'accélération est le facteur dominant
+      if (distance < 1) {
+        return distance / (v * 0.5);  // On suppose qu'on n'atteint que 50% de la vitesse max
+      }
+      
+      // Distance minimale pour atteindre la vitesse maximale (s = v²/2a)
+      const accelerationDistance = (v * v) / (2 * acceleration);
+      
+      // Si on peut atteindre la vitesse maximale
+      if (distance > 2 * accelerationDistance) {
+        // Temps pour accélérer + temps à vitesse constante + temps pour décélérer
+        const accelerationTime = v / acceleration;
+        const constantSpeedTime = (distance - 2 * accelerationDistance) / v;
+        return 2 * accelerationTime + constantSpeedTime;
+      } else {
+        // On n'atteint jamais la vitesse maximale (accélération puis décélération)
+        return 2 * Math.sqrt(distance / (2 * acceleration));
+      }
+    };
+    
+    // Analyser le G-code ligne par ligne
+    const lines = gcodeContent.split('\n');
+    let segments = [];  // Pour stocker les segments de mouvement
+    
+    for (const line of lines) {
+      // Détecter les changements d'état du stylo (M280)
+      if (line.includes('M280 P0 S90')) { // Pen up
+        if (isPenDown) {
+          isPenDown = false;
+          penUpDownCount++;
+        }
+        continue;
+      } else if (line.includes('M280 P0 S25')) { // Pen down
+        if (!isPenDown) {
+          isPenDown = true;
+          penUpDownCount++;
+        }
+        continue;
+      }
+      
+      // Traiter les mouvements
+      if (line.startsWith('G0') || line.startsWith('G1')) {
+        const xMatch = line.match(/X(-?\d+\.?\d*)/);
+        const yMatch = line.match(/Y(-?\d+\.?\d*)/);
+        
+        if (xMatch && yMatch) {
+          const x = parseFloat(xMatch[1]);
+          const y = parseFloat(yMatch[1]);
+          
+          // Calculer la distance
+          const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+          
+          if (distance > 0) {
+            // Ajouter le segment avec type (déplacement ou tracé)
+            const isTravel = line.startsWith('G0') || !isPenDown;
+            segments.push({
+              distance,
+              isTravel,
+              x1: lastX,
+              y1: lastY,
+              x2: x,
+              y2: y
+            });
+            
+            // Mettre à jour les totaux
+            if (isTravel) {
+              travelDistance += distance;
+            } else {
+              drawDistance += distance;
+            }
+          }
+          
+          // Mettre à jour les dernières coordonnées
+          lastX = x;
+          lastY = y;
+        }
+      }
+    }
+    
+    // Calculer le temps total avec accélération
+    let travelTime = 0;
+    let drawTime = 0;
+    
+    for (const segment of segments) {
+      if (segment.isTravel) {
+        travelTime += calculateTimeWithAcceleration(segment.distance, travelSpeedMmSec, false);
+      } else {
+        drawTime += calculateTimeWithAcceleration(segment.distance, travelSpeedMmSec, true);
+      }
+    }
+    
+    // Ajouter le temps pour les opérations de stylo (1s par mouvement)
+    const penOperationTime = penUpDownCount * penMoveTime;
+    
+    // Attente pour l'interaction utilisateur (M0)
+    // Rechercher les pauses utilisateur (M0) dans le code
+    const userPauses = gcodeContent.match(/M0/g);
+    const userPauseCount = userPauses ? userPauses.length : 0;
+    const userPauseTime = userPauseCount > 0 ? 30 : 0; // 30 secondes si au moins une pause
+    
+    // Calculer le temps total avec le facteur d'ajustement
+    const calculatedTimeSeconds = (travelTime + drawTime + penOperationTime) * adjustmentFactor + userPauseTime;
+    
+    // Arrondir à la seconde supérieure
+    const totalTimeSeconds = Math.ceil(calculatedTimeSeconds);
+    
+    // Convertir en formats lisibles
+    const hours = Math.floor(totalTimeSeconds / 3600);
+    const minutes = Math.floor((totalTimeSeconds % 3600) / 60);
+    const seconds = Math.floor(totalTimeSeconds % 60);
+    
+    return {
+      totalTimeSeconds,
+      formattedTime: `${hours > 0 ? hours + 'h ' : ''}${minutes}min ${seconds}s`,
+      details: {
+        travelDistance: travelDistance.toFixed(2) + ' mm',
+        drawDistance: drawDistance.toFixed(2) + ' mm',
+        travelTime: (travelTime / 60).toFixed(2) + ' min',
+        drawTime: (drawTime / 60).toFixed(2) + ' min',
+        penOperations: penUpDownCount,
+        penOperationTime: (penOperationTime / 60).toFixed(2) + ' min',
+        userPauses: userPauseCount
+      }
+    };
+  };
+
   const generateGcode = (svgContent, paperConfig, svgViewBox, machineConfig) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgContent, 'image/svg+xml');
@@ -885,6 +1053,7 @@ const PlotterApp = () => {
   
     // Générer un gcode pour chaque couleur
     const gcodeByColor = {};
+    const timeEstimationByColor = {};
     
     Object.entries(pathsByColor).forEach(([color, paths]) => {
       let gcode = [];
@@ -904,8 +1073,7 @@ const PlotterApp = () => {
       gcode.push("M280 P0 S90 T250");
       gcode.push(`M0 ${color} pen and click`);
       let isPenDown = false;
-      const travelSpeed = 3000;
-      const drawSpeed = 3000;
+      const travelSpeed = speedSettings.travelSpeed;
       
       // Traiter les paths de cette couleur
       paths.forEach(path => {
@@ -946,7 +1114,7 @@ const PlotterApp = () => {
                     gcode.push('M280 P0 S25 T150'); // Pen down
                     isPenDown = true;
                   }
-                  gcode.push(`G1 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${drawSpeed}`);
+                  gcode.push(`G1 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${travelSpeed}`);
                 }
               }
             }
@@ -960,21 +1128,33 @@ const PlotterApp = () => {
       gcode.push(";End of Gcode");
       
       gcodeByColor[color] = gcode.join('\n');
+      
+      // Calculer l'estimation du temps
+      timeEstimationByColor[color] = calculateDrawTime(
+        gcodeByColor[color], 
+        travelSpeed, 
+      );
     });
+
+    console.log(timeEstimationByColor)
     
-    return gcodeByColor;
+    return {
+      gcodeByColor,
+      timeEstimationByColor
+    };
   };
 
   const handleGenerateGcode = () => {
     if (!svgContent || !svgViewBox) return;
     
-    const gcodeByColor = generateGcode(svgContent, paperConfig, svgViewBox, machineConfig);
+    const result = generateGcode(svgContent, paperConfig, svgViewBox, machineConfig);
     
     // Mettre à jour l'état pour la prévisualisation
-    setGeneratedGcode(gcodeByColor);
+    setGeneratedGcode(result.gcodeByColor);
+    setTimeEstimations(result.timeEstimationByColor);
     
     // Créer un fichier pour chaque couleur
-    Object.entries(gcodeByColor).forEach(([color, gcode]) => {
+    Object.entries(result.gcodeByColor).forEach(([color, gcode]) => {
       const baseFilename = fileInputRef.current?.files[0]?.name.replace('.svg', '') || 'output';
       const filename = `${baseFilename}-${color}.gcode`;
       
@@ -1067,7 +1247,26 @@ const PlotterApp = () => {
           <h1 className="text-3xl font-bold">Plotter slicer</h1>
           <p className="text-xs	mb-4">for <a href="https://www.marginallyclever.com/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">Makelangelo 5</a> by <a href="https://sjvl.notion.site/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">sjvl</a></p>
 
-          <h2 className="text-lg font-bold mb-4 mt-12">Paper (mm)</h2>
+          {/* SPEEDS */}
+          <h2 className="text-lg font-bold mb-1 mt-6">Acceleration (mm/min)</h2>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  min="1000"
+                  max="3000"
+                  step="100"
+                  value={speedSettings.travelSpeed}
+                  onChange={(e) => handleSpeedChange('travelSpeed', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* PAPER */}
+          <h2 className="text-lg font-bold mb-1 mt-6">Paper (mm)</h2>
           <div className="space-y-4">
             <div className="relative">
               <label className="text-xs block mb-1">Format</label>
@@ -1122,7 +1321,8 @@ const PlotterApp = () => {
             </div>
           </div>  
 
-          <h2 className="text-lg font-bold mb-4 mt-8">Margins (mm)</h2>
+          {/* MARGINS */}
+          <h2 className="text-lg font-bold mb-1 mt-6">Margins (mm)</h2>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-2">
               <div>
@@ -1176,8 +1376,8 @@ const PlotterApp = () => {
             </div>
           </div>
             
-          {/* <h2 className="text-lg font-bold mb-4 mt-8">Files</h2> */}
-          <div className="space-y-2 mt-12">
+          {/* BUTTONS */}
+          <div className="space-y-2 mt-6">
             <button 
               className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
               onClick={() => fileInputRef.current?.click()}
@@ -1206,6 +1406,29 @@ const PlotterApp = () => {
           
             {/* <SerialConnection /> */}
           </div>
+
+          {/* TIME */}
+          {generatedGcode && (
+            <div className="mt-4 p-3 bg-gray-100 rounded-lg">
+              <h3 className="font-bold text-sm mb-2">Estimated time</h3>
+              {Object.entries(timeEstimations).map(([color, estimation]) => (
+                <div key={color} className="mb-0">
+                  <div className="flex items-center">
+                    <div 
+                      className="w-2 h-2 rounded-full mr-2" 
+                      style={{backgroundColor: color}}
+                    ></div>
+                    <span className="text-xs font-medium">{color}:</span>
+                    <span className="text-xs ml-2">{estimation.formattedTime}</span>
+                  </div>
+                  {/* <div className="text-xs text-gray-600 ml-6">
+                    <p>Distance tracée: {estimation.details.drawDistance}</p>
+                    <p>Distance déplacée: {estimation.details.travelDistance}</p>
+                  </div> */}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Prévisualisation */}
