@@ -1344,7 +1344,6 @@ const PlotterApp = () => {
     return svg.outerHTML;
   };
 
-  coucou
   ///////////SVG PROCESSING///////////
 
 
