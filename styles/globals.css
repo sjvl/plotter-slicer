@@ -22,3 +22,9 @@ body {
   overscroll-behavior: none;
   overflow: hidden;
 }
+
+/* NOUVEAU : Force le scroll dans le panneau de contrôle */
+.control-panel-scroll {
+  overflow-y: auto !important;
+  max-height: calc(100vh - 2rem) !important;
+}

@@ -1343,7 +1343,6 @@ const PlotterApp = () => {
     // Retourner le SVG complet, pas juste son contenu
     return svg.outerHTML;
   };
-
   ///////////SVG PROCESSING///////////
 
 
@@ -1738,342 +1737,334 @@ const PlotterApp = () => {
         ))}
       </>
     );
-};
+  };
   ///////////GCODE GENERATION///////////
 
   return (
-    <div className="p-4 max-w-screen-xl mx-auto">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div className="p-4 max-w-screen-xl mx-auto h-screen flex flex-col">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0">
         
-        {/* Panneau de contrôle */}
-        <div className="border rounded-lg p-4">
-          <h1 className="text-3xl font-bold">Plotter slicer</h1>
-          <p className="text-xs	mb-4">for <a href="https://www.marginallyclever.com/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">Makelangelo 5</a> by <a href="https://sjvl.notion.site/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">sjvl</a></p>
-
-          {/* SPEEDS */}
-          <h2 className="text-lg font-bold mb-1 mt-6">Acceleration (mm/min)</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <input
-                  type="number"
-                  className="w-full p-2 border rounded"
-                  min="1000"
-                  max="3000"
-                  step="100"
-                  value={speedSettings.travelSpeed}
-                  onChange={(e) => handleSpeedChange('travelSpeed', e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* PAPER */}
-          <h2 className="text-lg font-bold mb-1 mt-6">Paper (mm)</h2>
-          <div className="space-y-4">
-            <div className="relative">
-              <label className="text-xs block mb-1">Format</label>
-              <select
-                className="w-full p-2 pr-10 border rounded appearance-none bg-white"
-                value={selectedFormat}
-                onChange={(e) => handleFormatChange(e.target.value)}
-              >
-                <option value="A5">A5 (148×210mm)</option>
-                <option value="A4">A4 (210×297mm)</option>
-                <option value="A3">A3 (297×420mm)</option>
-                <option value="A2">A2 (420×594mm)</option>
-                {selectedFormat === 'custom' && <option value="custom">Custom</option>}
-              </select>
-              <div className="pointer-events-none absolute right-2 top-8">
-                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                </svg>
-              </div>
-            </div>
-            <div className="grid grid-cols-[1fr,auto,1fr] gap-2 items-end">
-              <div>
-                <label className="text-xs block mb-1">Width</label>
-                <input
-                  type="number"
-                  className="w-full p-2 border rounded"
-                  value={paperConfig.width}
-                  onChange={(e) => handleDimensionChange('width', Number(e.target.value))}
-
-                />
-              </div>
-              <button 
-              className="p-2 border rounded bg-gray-50 hover:bg-gray-100"
-              onClick={() => setPaperConfig({
-                  ...paperConfig,
-                  width: paperConfig.height,
-                  height: paperConfig.width
-                })}
-              >
-                <ArrowLeftRight size={16} />
-              </button>
-              <div>
-                <label className="text-xs block mb-1">Height</label>
-                <input
-                  type="number"
-                  className="w-full p-2 border rounded"
-                  value={paperConfig.height}
-                  onChange={(e) => handleDimensionChange('height', Number(e.target.value))}
-
-                />
-              </div>
-            </div>
-          </div>  
-
-          {/* MARGINS */}
-          <h2 className="text-lg font-bold mb-1 mt-6">Margins (mm)</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-xs block mb-1">Top</label>
-                <input
-                  type="number"
-                  className="w-full p-2 border rounded"
-                  value={paperConfig.marginTop}
-                  onChange={(e) => setPaperConfig({
-                    ...paperConfig,
-                    marginTop: Number(e.target.value)
-                  })}
-                />
-              </div>
-              <div>
-                <label className="text-xs block mb-1">Right</label>
-                <input
-                  type="number"
-                  className="w-full p-2 border rounded"
-                  value={paperConfig.marginRight}
-                  onChange={(e) => setPaperConfig({
-                    ...paperConfig,
-                    marginRight: Number(e.target.value)
-                  })}
-                />
-              </div>
-              <div>
-                <label className="text-xs block mb-1">Bottom</label>
-                <input
-                  type="number"
-                  className="w-full p-2 border rounded"
-                  value={paperConfig.marginBottom}
-                  onChange={(e) => setPaperConfig({
-                    ...paperConfig,
-                    marginBottom: Number(e.target.value)
-                  })}
-                />
-              </div>
-              <div>
-                <label className="text-xs block mb-1">Left</label>
-                <input
-                  type="number"
-                  className="w-full p-2 border rounded"
-                  value={paperConfig.marginLeft}
-                  onChange={(e) => setPaperConfig({
-                    ...paperConfig,
-                    marginLeft: Number(e.target.value)
-                  })}
-                />
-              </div>
-            </div>
-          </div>
-            
-          {/* BUTTONS */}
-          <div className="space-y-2 mt-6">
-            <button 
-              className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              Importer SVG
-            </button>
-            <input
-              type="file"
-              ref={fileInputRef}
-              className="hidden"
-              accept=".svg"
-              onChange={handleFileUpload}
-            />
-
-            <button 
-              className={`w-full p-2 rounded ${
-                svgContent 
-                  ? 'bg-green-500 text-white hover:bg-green-600' 
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-              onClick={handleGenerateGcode}
-              disabled={!svgContent}
-            >
-              Générer GCode
-            </button>
-          
-            {/* <SerialConnection /> */}
-          </div>
-
-          {/* TIME */}
-          {generatedGcode && (
-            <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-              <h3 className="font-bold text-sm mb-2">Estimated time</h3>
-              {Object.entries(timeEstimations).map(([color, estimation]) => (
-                <div key={color} className="mb-0">
-                  <div className="flex items-center">
-                    <div 
-                      className="w-2 h-2 rounded-full mr-2" 
-                      style={{backgroundColor: color}}
-                    ></div>
-                    <span className="text-xs font-medium">{color}:</span>
-                    <span className="text-xs ml-2">{estimation.formattedTime}</span>
-                  </div>
-                  {/* <div className="text-xs text-gray-600 ml-6">
-                    <p>Distance tracée: {estimation.details.drawDistance}</p>
-                    <p>Distance déplacée: {estimation.details.travelDistance}</p>
-                  </div> */}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Prévisualisation */}
-        <div className="border rounded-lg md:col-span-2 bg-gray-100">
-          <div className="w-full max-h-[calc(100vh-3rem)] overflow-hidden preview-container touch-none">
-          <svg
-            viewBox={`0 0 ${canvas.width} ${canvas.height}`}
-            className="w-full h-full bg-gray-100"
-            onWheel={(e) => {
-              e.preventDefault();  // Empêcher le zoom du navigateur
-              handleWheel(e);
-            }}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-          >
-            <g transform={`translate(${viewTransform.x} ${viewTransform.y}) scale(${viewTransform.scale})`}>
-                {/* Zone de dessin totale du plotter */}
-                {/* <rect
-                  x={(canvas.width - machineConfig.width) /2}
-                  y={(canvas.height - machineConfig.height) /2}
-                  width={machineConfig.width}
-                  height={machineConfig.height}
-                  fill="#d1d1d1"
-                  stroke="gray"
-                  strokeWidth="0.5"
-                /> */}
-
-                {/* Support machine */}
-                <rect
-                  x={(canvas.width - machineConfig.width) /2 -30}
-                  y={(canvas.height - 1030) /2 - 30}
-                  width={machineConfig.width + 60}
-                  height={60}
-                  fill="#c9bca1"
-                  stroke="grey"
-                  strokeWidth="0.5"
-                />
-                
-                {/* Moteurs */}
-                <rect
-                  x={(canvas.width - machineConfig.width) /2 -25}
-                  y={(canvas.height - 1030) /2 - 25}
-                  width={50}
-                  height={70}
-                  fill="#ab9c7e"
-                  stroke="grey"
-                  strokeWidth="0.5"
-                />
-                <rect 
-                  x={(canvas.width - machineConfig.width) /2 - 15} 
-                  y={(canvas.height - machineConfig.height) /2 - 15} 
-                  width={30}
-                  height={30}
-                  fill="black" 
-                />
-                <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
-
-                <rect
-                  x={(canvas.width) -248}
-                  y={(canvas.height - 1030) /2 - 25}
-                  width={50}
-                  height={70}
-                  fill="#ab9c7e"
-                  stroke="grey"
-                  strokeWidth="0.5"
-                />
-                <rect 
-                  x={canvas.width - (canvas.width - machineConfig.width) /2 - 15} 
-                  y={(canvas.height - machineConfig.height) /2 - 15} 
-                  width={30}
-                  height={30}
-                  fill="black" 
-                />
-                <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
-                
-                {/* Ecran + SD */}
-                <rect
-                  x={(canvas.width - 210) / 2 - 150}
-                  y={(canvas.height - 1030) /2 - 20}
-                  width={150}
-                  height={40}
-                  fill="white"
-                  stroke="grey"
-                  strokeWidth=".5"
-                />
-                <rect
-                  x={(canvas.width - 210) / 2 - 140}
-                  y={(canvas.height - 1030) /2 - 15}
-                  width={80}
-                  height={30}
-                  fill="#2463EB"
-                  stroke="grey"
-                  strokeWidth=".5"
-                />
-                <circle cx={(canvas.width - 210) / 2 - 15} cy={(canvas.height - 1030) /2} r="6" fill="black" />
-
+        {/* Panneau de contrôle - SCROLLABLE avec classe CSS personnalisée */}
+        <div className="border rounded-lg">
+          <div className="p-4 control-panel-scroll">
+            <h1 className="text-3xl font-bold">Plotter slicer</h1>
+            <p className="text-xs mb-4">for <a href="https://www.marginallyclever.com/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">Makelangelo 5</a> by <a href="https://sjvl.notion.site/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">sjvl</a></p>
   
+            {/* SPEEDS */}
+            <h2 className="text-lg font-bold mb-1 mt-6">Acceleration (mm/min)</h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    min="1000"
+                    max="3000"
+                    step="100"
+                    value={speedSettings.travelSpeed}
+                    onChange={(e) => handleSpeedChange('travelSpeed', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+  
+            {/* PAPER */}
+            <h2 className="text-lg font-bold mb-1 mt-6">Paper (mm)</h2>
+            <div className="space-y-4">
+              <div className="relative">
+                <label className="text-xs block mb-1">Format</label>
+                <select
+                  className="w-full p-2 pr-10 border rounded appearance-none bg-white"
+                  value={selectedFormat}
+                  onChange={(e) => handleFormatChange(e.target.value)}
+                >
+                  <option value="A5">A5 (148×210mm)</option>
+                  <option value="A4">A4 (210×297mm)</option>
+                  <option value="A3">A3 (297×420mm)</option>
+                  <option value="A2">A2 (420×594mm)</option>
+                  {selectedFormat === 'custom' && <option value="custom">Custom</option>}
+                </select>
+                <div className="pointer-events-none absolute right-2 top-8">
+                  <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="grid grid-cols-[1fr,auto,1fr] gap-2 items-end">
+                <div>
+                  <label className="text-xs block mb-1">Width</label>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    value={paperConfig.width}
+                    onChange={(e) => handleDimensionChange('width', Number(e.target.value))}
+                  />
+                </div>
+                <button 
+                  className="p-2 border rounded bg-gray-50 hover:bg-gray-100"
+                  onClick={() => setPaperConfig({
+                      ...paperConfig,
+                      width: paperConfig.height,
+                      height: paperConfig.width
+                    })}
+                >
+                  <ArrowLeftRight size={16} />
+                </button>
+                <div>
+                  <label className="text-xs block mb-1">Height</label>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    value={paperConfig.height}
+                    onChange={(e) => handleDimensionChange('height', Number(e.target.value))}
+                  />
+                </div>
+              </div>
+            </div>  
+  
+            {/* MARGINS */}
+            <h2 className="text-lg font-bold mb-1 mt-6">Margins (mm)</h2>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs block mb-1">Top</label>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    value={paperConfig.marginTop}
+                    onChange={(e) => setPaperConfig({
+                      ...paperConfig,
+                      marginTop: Number(e.target.value)
+                    })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs block mb-1">Right</label>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    value={paperConfig.marginRight}
+                    onChange={(e) => setPaperConfig({
+                      ...paperConfig,
+                      marginRight: Number(e.target.value)
+                    })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs block mb-1">Bottom</label>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    value={paperConfig.marginBottom}
+                    onChange={(e) => setPaperConfig({
+                      ...paperConfig,
+                      marginBottom: Number(e.target.value)
+                    })}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs block mb-1">Left</label>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    value={paperConfig.marginLeft}
+                    onChange={(e) => setPaperConfig({
+                      ...paperConfig,
+                      marginLeft: Number(e.target.value)
+                    })}
+                  />
+                </div>
+              </div>
+            </div>
+              
+            {/* BUTTONS */}
+            <div className="space-y-2 mt-6">
+              <button 
+                className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Importer SVG
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".svg"
+                onChange={handleFileUpload}
+              />
+  
+              <button 
+                className={`w-full p-2 rounded ${
+                  svgContent 
+                    ? 'bg-green-500 text-white hover:bg-green-600' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+                onClick={handleGenerateGcode}
+                disabled={!svgContent}
+              >
+                Générer GCode
+              </button>
+            </div>
+  
+            {/* TIME */}
+            {generatedGcode && (
+              <div className="mt-4 p-3 bg-gray-100 rounded-lg">
+                <h3 className="font-bold text-sm mb-2">Estimated time</h3>
+                {Object.entries(timeEstimations).map(([color, estimation]) => (
+                  <div key={color} className="mb-0">
+                    <div className="flex items-center">
+                      <div 
+                        className="w-2 h-2 rounded-full mr-2" 
+                        style={{backgroundColor: color}}
+                      ></div>
+                      <span className="text-xs font-medium">{color}:</span>
+                      <span className="text-xs ml-2">{estimation.formattedTime}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
-                {/* Papier centré */}
-                <rect
-                  x={(canvas.width - paperConfig.width) / 2}
-                  y={(canvas.height - paperConfig.height) / 2}
-                  width={paperConfig.width}
-                  height={paperConfig.height}
-                  fill="white"
-                  stroke="gray"
-                  strokeWidth="1"
-                />
-                
-                {/* Zone de dessin sur le papier */}
-                <rect
-                  x={(canvas.width - paperConfig.width) / 2 + paperConfig.marginLeft}
-                  y={(canvas.height - paperConfig.height) / 2 + paperConfig.marginTop}
-                  width={calculateDrawingArea().width}
-                  height={calculateDrawingArea().height}
-                  fill="none"
-                  stroke="blue"
-                  strokeDasharray="5,5"
-                  strokeWidth=".5"
-                />
-
-              {svgContent && (
-                <g transform={calculateSvgTransform()}>
-                  <g dangerouslySetInnerHTML={{ 
-                    __html: svgContent.replace(/<svg[^>]*>|<\/svg>/g, '')
-                      .replace(/width="[^"]*"/g, '')
-                      .replace(/height="[^"]*"/g, '')
-                  }} />
-                </g>
-              )}
-
-              {/* prévisualisation du GCode */}
-              {generatedGcode && 
-                <GCodePreview gcode={generatedGcode}/>
-              }
-            </g>
-
+            <SerialConnection />
+          </div>
+        </div>
+  
+        {/* Prévisualisation */}
+        <div className="border rounded-lg md:col-span-2 bg-gray-100 min-h-0">
+          <div className="w-full h-full overflow-hidden preview-container touch-none">
+            <svg
+              viewBox={`0 0 ${canvas.width} ${canvas.height}`}
+              className="w-full h-full bg-gray-100"
+              onWheel={(e) => {
+                e.preventDefault();  // Empêcher le zoom du navigateur
+                handleWheel(e);
+              }}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+              style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+            >
+              <g transform={`translate(${viewTransform.x} ${viewTransform.y}) scale(${viewTransform.scale})`}>
+                  {/* Zone de dessin totale du plotter */}
+                  {/* <rect
+                    x={(canvas.width - machineConfig.width) /2}
+                    y={(canvas.height - machineConfig.height) /2}
+                    width={machineConfig.width}
+                    height={machineConfig.height}
+                    fill="#d1d1d1"
+                    stroke="gray"
+                    strokeWidth="0.5"
+                  /> */}
+  
+                  {/* Support machine */}
+                  <rect
+                    x={(canvas.width - machineConfig.width) /2 -30}
+                    y={(canvas.height - 1030) /2 - 30}
+                    width={machineConfig.width + 60}
+                    height={60}
+                    fill="#c9bca1"
+                    stroke="grey"
+                    strokeWidth="0.5"
+                  />
+                  
+                  {/* Moteurs */}
+                  <rect
+                    x={(canvas.width - machineConfig.width) /2 -25}
+                    y={(canvas.height - 1030) /2 - 25}
+                    width={50}
+                    height={70}
+                    fill="#ab9c7e"
+                    stroke="grey"
+                    strokeWidth="0.5"
+                  />
+                  <rect 
+                    x={(canvas.width - machineConfig.width) /2 - 15} 
+                    y={(canvas.height - machineConfig.height) /2 - 15} 
+                    width={30}
+                    height={30}
+                    fill="black" 
+                  />
+                  <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
+  
+                  <rect
+                    x={(canvas.width) -248}
+                    y={(canvas.height - 1030) /2 - 25}
+                    width={50}
+                    height={70}
+                    fill="#ab9c7e"
+                    stroke="grey"
+                    strokeWidth="0.5"
+                  />
+                  <rect 
+                    x={canvas.width - (canvas.width - machineConfig.width) /2 - 15} 
+                    y={(canvas.height - machineConfig.height) /2 - 15} 
+                    width={30}
+                    height={30}
+                    fill="black" 
+                  />
+                  <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
+                  
+                  {/* Ecran + SD */}
+                  <rect
+                    x={(canvas.width - 210) / 2 - 150}
+                    y={(canvas.height - 1030) /2 - 20}
+                    width={150}
+                    height={40}
+                    fill="white"
+                    stroke="grey"
+                    strokeWidth=".5"
+                  />
+                  <rect
+                    x={(canvas.width - 210) / 2 - 140}
+                    y={(canvas.height - 1030) /2 - 15}
+                    width={80}
+                    height={30}
+                    fill="#2463EB"
+                    stroke="grey"
+                    strokeWidth=".5"
+                  />
+                  <circle cx={(canvas.width - 210) / 2 - 15} cy={(canvas.height - 1030) /2} r="6" fill="black" />
+  
+                  {/* Papier centré */}
+                  <rect
+                    x={(canvas.width - paperConfig.width) / 2}
+                    y={(canvas.height - paperConfig.height) / 2}
+                    width={paperConfig.width}
+                    height={paperConfig.height}
+                    fill="white"
+                    stroke="gray"
+                    strokeWidth="1"
+                  />
+                  
+                  {/* Zone de dessin sur le papier */}
+                  <rect
+                    x={(canvas.width - paperConfig.width) / 2 + paperConfig.marginLeft}
+                    y={(canvas.height - paperConfig.height) / 2 + paperConfig.marginTop}
+                    width={calculateDrawingArea().width}
+                    height={calculateDrawingArea().height}
+                    fill="none"
+                    stroke="blue"
+                    strokeDasharray="5,5"
+                    strokeWidth=".5"
+                  />
+  
+                {svgContent && (
+                  <g transform={calculateSvgTransform()}>
+                    <g dangerouslySetInnerHTML={{ 
+                      __html: svgContent.replace(/<svg[^>]*>|<\/svg>/g, '')
+                        .replace(/width="[^"]*"/g, '')
+                        .replace(/height="[^"]*"/g, '')
+                    }} />
+                  </g>
+                )}
+  
+                {/* prévisualisation du GCode */}
+                {generatedGcode && 
+                  <GCodePreview gcode={generatedGcode}/>
+                }
+              </g>
             </svg>
-
           </div>
         </div>
       </div>
