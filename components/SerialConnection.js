@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
-const SerialConnection = ({ onSendGcode }) => {
+const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     const [isConnected, setIsConnected] = useState(false);
     const [port, setPort] = useState(null);
     const [messages, setMessages] = useState([]);
@@ -11,14 +11,20 @@ const SerialConnection = ({ onSendGcode }) => {
     const abortControllerRef = useRef(null);
     const jobAbortControllerRef = useRef(null);
 
-    // Configuration pour différents types de carte mère
+    // Configuration
     const [serialConfig, setSerialConfig] = useState({
-        baudRate: 250000, // Plus courant pour Marlin/Rumba
+        baudRate: 250000,
         dataBits: 8,
         stopBits: 1,
         parity: 'none',
         flowControl: 'none'
     });
+
+    // Exposer les méthodes via ref
+    useImperativeHandle(ref, () => ({
+        isConnected,
+        sendToSDAndExecute
+    }), [isConnected]);
 
     const addMessage = (message, type = 'info') => {
         const timestamp = new Date().toLocaleTimeString();
@@ -29,6 +35,96 @@ const SerialConnection = ({ onSendGcode }) => {
         }]);
     };
 
+    // Envoyer gcode sur SD et exécuter //
+    const calculateChecksum = (line) => {
+        let checksum = 0;
+        for (let i = 0; i < line.length; i++) {
+            checksum ^= line.charCodeAt(i);
+        }
+        return checksum;
+    };
+
+    const formatGcodeLine = (line, lineNumber) => {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) return null;
+        
+        const numberedLine = `N${lineNumber} ${trimmedLine}`;
+        const checksum = calculateChecksum(numberedLine);
+        return `${numberedLine}*${checksum}`;
+    };
+
+    const sendToSDAndExecute = async (gcodeContent, filename) => {
+        const baseName = filename.replace(/\.[^/.]+$/, "");
+        const shortName = baseName.toUpperCase()
+            .replace(/[^A-Z0-9]/g, "")
+            .substring(0, 8);
+        const gcoFilename = `tmp.GCO`;
+        
+        try {
+            addMessage(`Écriture SD avec checksums de ${gcoFilename}...`, 'info');
+            
+            await sendCommand('M21');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            await sendCommand(`M28 ${gcoFilename}`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const lines = gcodeContent.split('\n').filter(line => line.trim() && !line.startsWith(';'));
+            const totalLines = lines.length;
+            const writer = port.writable.getWriter();
+            
+            const startTime = Date.now();
+            
+            for (let i = 0; i < lines.length; i++) {
+                const formattedLine = formatGcodeLine(lines[i].trim(), i + 1);
+                const data = new TextEncoder().encode(formattedLine + '\n');
+                await writer.write(data);
+                await new Promise(resolve => setTimeout(resolve, 30));
+                
+                // Afficher progression tous les 1% (ou minimum tous les 100 lignes)
+                const progressInterval = Math.max(100, Math.floor(totalLines / 1000));
+                
+                if ((i + 1) % progressInterval === 0 || i === totalLines - 1) {
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
+                    const percent = (((i + 1) / totalLines) * 100).toFixed(1);
+                    const linesPerSec = ((i + 1) / elapsed).toFixed(0);
+                    const remainingLines = totalLines - (i + 1);
+                    const estimatedRemaining = (remainingLines / linesPerSec / 60).toFixed(1);
+                    
+                    addMessage(
+                        `📊 Progression: ${percent}% (${i + 1}/${totalLines}) | ` +
+                        `${linesPerSec} l/s | ~${estimatedRemaining}min restant`,
+                        'info'
+                    );
+                }
+            }
+            
+            writer.releaseLock();
+            
+            const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
+            addMessage(`✅ ${totalLines} lignes transférées en ${totalTime} minutes`, 'success');
+            
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            await sendCommand('M29');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            
+            await sendCommand(`M23 ${gcoFilename}`);
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await sendCommand('M24');
+            
+            addMessage(`${gcoFilename} créé avec checksums et lancé`, 'success');
+            
+        } catch (error) {
+            addMessage(`Erreur: ${error.message}`, 'error');
+            try {
+                await sendCommand('M29');
+            } catch (e) {}
+            throw error;
+        }
+    };
+
+    // Connexion serial
     const connect = async () => {
         try {
             // Vérifier que l'API est disponible
@@ -93,6 +189,35 @@ const SerialConnection = ({ onSendGcode }) => {
         }
     };
 
+    const disconnect = async () => {
+        try {
+            // Arrêter la lecture
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+                abortControllerRef.current = null;
+            }
+
+            // Fermer le reader si nécessaire
+            if (readerRef.current) {
+                await readerRef.current.cancel();
+                readerRef.current = null;
+            }
+
+            // Fermer le port
+            if (port) {
+                await port.close();
+                setPort(null);
+            }
+            
+            setIsConnected(false);
+            addMessage('Disconnected from port', 'info');
+        } catch (error) {
+            console.error('Disconnection failed:', error);
+            addMessage(`Disconnection error: ${error.message}`, 'error');
+        }
+    };
+
+    // Console debbug
     const startReading = async (selectedPort) => {
         try {
             const reader = selectedPort.readable.getReader();
@@ -163,6 +288,21 @@ const SerialConnection = ({ onSendGcode }) => {
         return printableChars.length < str.length * 0.3; // Moins de 30% de caractères non-imprimables
     };
 
+    const getMessageClass = (type) => {
+        switch (type) {
+            case 'success': return 'text-green-600';
+            case 'error': return 'text-red-600';
+            case 'warning': return 'text-orange-600';
+            case 'sent': return 'text-blue-600 font-medium';
+            default: return 'text-gray-700';
+        }
+    };
+
+    const clearMessages = () => {
+        setMessages([]);
+    };
+
+    // Envoyer gcode
     const sendCommand = async (command) => {
         if (!port) {
             addMessage('No port connected', 'error');
@@ -198,34 +338,6 @@ const SerialConnection = ({ onSendGcode }) => {
         }
     };
 
-    const disconnect = async () => {
-        try {
-            // Arrêter la lecture
-            if (abortControllerRef.current) {
-                abortControllerRef.current.abort();
-                abortControllerRef.current = null;
-            }
-
-            // Fermer le reader si nécessaire
-            if (readerRef.current) {
-                await readerRef.current.cancel();
-                readerRef.current = null;
-            }
-
-            // Fermer le port
-            if (port) {
-                await port.close();
-                setPort(null);
-            }
-            
-            setIsConnected(false);
-            addMessage('Disconnected from port', 'info');
-        } catch (error) {
-            console.error('Disconnection failed:', error);
-            addMessage(`Disconnection error: ${error.message}`, 'error');
-        }
-    };
-
     const handleCommandSubmit = (e) => {
         e.preventDefault();
         if (inputCommand.trim()) {
@@ -234,10 +346,29 @@ const SerialConnection = ({ onSendGcode }) => {
         }
     };
 
-    const clearMessages = () => {
-        setMessages([]);
+    const sendTestCommands = () => {
+        const testCommands = [
+            // 'M115', // Informations firmware
+            'M114', // Position actuelle
+            'M280 P0 S90', // Lever le stylo
+            'G28',  // Home
+            'M280 P0 S25', // Baisser le stylo
+            'M280 P0 S90', // Lever le stylo
+            'M84', // Relacher
+        ];
+        
+        testCommands.forEach((cmd, index) => {
+            setTimeout(() => sendCommand(cmd), index * 1000);
+        });
     };
 
+    const abortJob = () => {
+        if (jobAbortControllerRef.current) {
+            jobAbortControllerRef.current.abort();
+        }
+    };
+
+    // Envoyer un job via port serie
     const sendGcodeJob = async (gcodeContent, jobName = 'Print Job') => {
         if (!port || !port.writable) {
             addMessage('Port not available for G-code job', 'error');
@@ -313,23 +444,6 @@ const SerialConnection = ({ onSendGcode }) => {
         });
     };
 
-    const sendTestCommands = () => {
-        const testCommands = [
-            // 'M115', // Informations firmware
-            'M114', // Position actuelle
-            'G28',  // Home
-            'M280 P0 S90', // Lever le stylo
-            'M280 P0 S25', // Baisser le stylo
-            'M280 P0 S90', // Lever le stylo
-            'M84', // Relacher
-        ];
-        
-        testCommands.forEach((cmd, index) => {
-            setTimeout(() => sendCommand(cmd), index * 1000);
-        });
-    };
-
-    // Exposer la fonction sendGcodeJob au parent
     useEffect(() => {
         if (onSendGcode && isConnected) {
             onSendGcode(sendGcodeJob);
@@ -345,15 +459,7 @@ const SerialConnection = ({ onSendGcode }) => {
         };
     }, []);
 
-    const getMessageClass = (type) => {
-        switch (type) {
-            case 'success': return 'text-green-600';
-            case 'error': return 'text-red-600';
-            case 'warning': return 'text-orange-600';
-            case 'sent': return 'text-blue-600 font-medium';
-            default: return 'text-gray-700';
-        }
-    };
+    
 
     return (
         <div className="mt-4">
@@ -449,6 +555,7 @@ const SerialConnection = ({ onSendGcode }) => {
             </div>
         </div>
     );
-};
+});
 
+SerialConnection.displayName = 'SerialConnection';
 export default SerialConnection;
