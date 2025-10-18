@@ -60,52 +60,21 @@ const PlotterApp = () => {
   });
 
   const [serialConnectionRef, setSerialConnectionRef] = useState(null);
+  
 
-  // const handleSendAndExecuteGCode = async (color, gcode) => {
-  //   console.log('=== DEBUG GCODE COMPARISON ===');
-  //   console.log('GCode de l\'état (premiers 200 chars):', gcode.substring(0, 200));
-  
-  //   if (!serialConnectionRef?.isConnected) {
-  //     alert('Plotter non connecté');
-  //     return;
-  //   }
-  
-  //   // Utiliser la même logique que handleGenerateGcode
-  //   const result = generateGcode(svgContent, paperConfig, svgViewBox, machineConfig);
-  //   console.log('GCode fraîchement généré (premiers 200 chars):', result.gcodeByColor[color].substring(0, 200));
-  //   console.log('Sont-ils identiques?', gcode === result.gcodeByColor[color]);
-  //   console.log('Longueur état:', gcode.length, 'Longueur fraîche:', result.gcodeByColor[color].length);
-  //   const freshGcode = result.gcodeByColor[color];
-    
-  //   if (!freshGcode) {
-  //     alert(`Impossible de générer le GCode pour la couleur ${color}`);
-  //     return;
-  //   }
-  
-  //   const baseFilename = fileInputRef.current?.files[0]?.name.replace('.svg', '') || 'output';
-  //   const filename = `${baseFilename}-${color}.gcode`;
-    
-  //   try {
-  //     await serialConnectionRef.sendToSDAndExecute(freshGcode, filename);
-  //   } catch (error) {
-  //     alert('Erreur: ' + error.message);
-  //   }
-  // };
-  const handleSendAndExecuteGCode = async (color, gcode) => {
-    console.log('=== DEBUG GCODE COMPARISON ===');
-    console.log('GCode de l\'état (premiers 200 chars):', gcode.substring(0, 200));
-    
-    // PAS de génération fraîche - on utilise directement 'gcode'
-    console.log('Utilisation directe du GCode de l\'état');
-    console.log('Longueur:', gcode.length);
+  const handleStreamGCode = async (color, gcode) => {
+    console.log('=== STREAMING GCODE ===');
+    console.log('Color:', color);
+    console.log('Length:', gcode.length, 'caractères');
     
     const baseFilename = fileInputRef.current?.files[0]?.name.replace('.svg', '') || 'output';
-    const filename = `${baseFilename}-${color}.gcode`;
+    const jobName = `${baseFilename}-${color}`;
     
     try {
-      await serialConnectionRef.sendToSDAndExecute(gcode, filename);
+        await serialConnectionRef.streamGcode(gcode, jobName);
+        alert(`✅ Streaming de "${color}" terminé avec succès !`);
     } catch (error) {
-      alert('Erreur: ' + error.message);
+        // alert(`❌ Erreur streaming: ${error.message}`);
     }
   };
 
@@ -1415,10 +1384,10 @@ const PlotterApp = () => {
   ///////////GCODE GENERATION///////////
 
   return (
-    <div className="p-4 max-w-screen-xl mx-auto h-screen flex flex-col">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1 min-h-0">
+    <div className="p-4 max-w-screen-xxl mx-auto h-screen flex flex-col">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1 min-h-0">
         
-        {/* Panneau de contrôle - SCROLLABLE avec classe CSS personnalisée */}
+        {/* Panneau de contrôle */}
         <div className="border rounded-lg">
           <div className="p-4 control-panel-scroll">
             <h1 className="text-3xl font-bold">Plotter slicer</h1>
@@ -1598,42 +1567,6 @@ const PlotterApp = () => {
                 ))}
               </div>
             )}
-
-
-{generatedGcode && (
-  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-    <h3 className="font-bold text-sm mb-2">Envoyer et Exécuter</h3>
-    <div className="space-y-2">
-      {Object.entries(generatedGcode).map(([color, gcode]) => (
-        <button
-          key={color}
-          className={`w-full px-3 py-2 rounded text-sm font-medium ${
-            serialConnectionRef?.isConnected
-              ? 'bg-blue-500 text-white hover:bg-blue-600' 
-              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-          }`}
-          onClick={() => handleSendAndExecuteGCode(color, gcode)}
-          disabled={!serialConnectionRef?.isConnected}
-        >
-          <div className="flex items-center justify-center gap-2">
-            <div 
-              className="w-3 h-3 rounded-full" 
-              style={{backgroundColor: color}}
-            ></div>
-            <span>Envoyer {color} sur SD → Lancer</span>
-          </div>
-        </button>
-      ))}
-    </div>
-  </div>
-)}
-
-<SerialConnection 
-  ref={setSerialConnectionRef}
-  onSendGcode={(sendFunction) => {
-    // Optionnel : stocker la fonction d'envoi si besoin
-  }}
-/>
           </div>
         </div>
   
@@ -1773,6 +1706,46 @@ const PlotterApp = () => {
                 }
               </g>
             </svg>
+          </div>
+        </div>
+
+        {/* Web serial */}
+        <div className="border rounded-lg">
+          <div className="p-4 control-panel-scroll">
+            <SerialConnection 
+              ref={setSerialConnectionRef}
+              onSendGcode={(sendFunction) => {
+                // Optionnel : stocker la fonction d'envoi si besoin
+              }}
+            />
+
+            {generatedGcode && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                <h3 className="font-bold text-sm mb-2">Jobs</h3>
+                <div className="space-y-3">
+                  {Object.entries(generatedGcode).map(([color, gcode]) => (
+                    <div key={color} className="space-y-1">
+                      {/*Bouton Streaming */}
+                      <button
+                        className={`w-full px-3 py-2 rounded text-sm font-medium transition-colors flex items-center mb-1 ${
+                          serialConnectionRef?.isConnected && !serialConnectionRef?.isStreaming
+                            ? `bg-green-500 text-${color} hover:bg-green-600`
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                        onClick={() => handleStreamGCode(color, gcode)}
+                        disabled={!serialConnectionRef?.isConnected && !serialConnectionRef?.isStreaming}
+                      >
+                        <div 
+                          className="w-3 h-3 rounded-full mr-2" 
+                          style={{backgroundColor: color}}
+                        ></div>
+                        Draw {color} ⚡ 
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

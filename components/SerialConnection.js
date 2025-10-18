@@ -1,15 +1,19 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import GCodeStreamer from '../utils/GCodeStreamer';
 
 const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     const [isConnected, setIsConnected] = useState(false);
     const [port, setPort] = useState(null);
     const [messages, setMessages] = useState([]);
     const [inputCommand, setInputCommand] = useState('');
-    const [isExecutingJob, setIsExecutingJob] = useState(false);
-    const [jobProgress, setJobProgress] = useState({ current: 0, total: 0 });
+    const [isStreaming, setIsStreaming] = useState(false);
+    const [streamProgress, setStreamProgress] = useState({ current: 0, total: 0, percent: 0 });
+
     const readerRef = useRef(null);
     const abortControllerRef = useRef(null);
     const jobAbortControllerRef = useRef(null);
+    const streamerRef = useRef(null);
+
 
     // Configuration
     const [serialConfig, setSerialConfig] = useState({
@@ -23,8 +27,101 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     // Exposer les méthodes via ref
     useImperativeHandle(ref, () => ({
         isConnected,
-        sendToSDAndExecute
-    }), [isConnected]);
+        streamGcode,
+        isStreaming,
+        abortStreaming
+    }), [isConnected, isStreaming]);
+
+    // Console debbug
+    const startReading = async (selectedPort) => {
+        try {
+            const reader = selectedPort.readable.getReader();
+            readerRef.current = reader;
+            
+            let buffer = '';
+            
+            while (true) {
+                const { value, done } = await reader.read();
+                
+                if (done) {
+                    addMessage('Reading stopped', 'info');
+                    break;
+                }
+                
+                // Décoder les données reçues
+                const chunk = new TextDecoder('utf-8', { fatal: false }).decode(value);
+                buffer += chunk;
+                
+                // Traiter les lignes complètes (terminées par \n ou \r\n)
+                const lines = buffer.split(/\r?\n/);
+                buffer = lines.pop() || ''; // Garder la ligne incomplète
+                
+                for (const line of lines) {
+                    if (line.trim()) {
+                        processReceivedLine(line.trim());
+                    }
+                }
+            }
+        } catch (error) {
+            if (error.name !== 'AbortError') {
+                console.error('Error reading data:', error);
+                addMessage(`Reading error: ${error.message}`, 'error');
+            }
+        } finally {
+            if (readerRef.current) {
+                readerRef.current.releaseLock();
+                readerRef.current = null;
+            }
+        }
+    };
+
+    const processReceivedLine = (line) => {
+        // Si streaming actif, le streamer gère les "ok"
+        if (streamerRef.current?.isActive()) {
+            streamerRef.current.processLine(line);
+            return;
+        }
+
+        // Filtrer et interpréter les réponses du firmware
+        if (line.startsWith('ok')) {
+            addMessage(`✓ ${line}`, 'success');
+        } else if (line.startsWith('Error') || line.startsWith('!!')) {
+            addMessage(`✗ ${line}`, 'error');
+        } else if (line.startsWith('echo:') || line.startsWith('FIRMWARE_NAME')) {
+            addMessage(`ℹ ${line}`, 'info');
+        } else if (line.match(/^[XYZ]:/)) {
+            addMessage(`📍 Position: ${line}`, 'info');
+        } else if (line.includes('temperature') || line.includes('temp')) {
+            addMessage(`🌡 ${line}`, 'info');
+        } else if (line.trim().length > 0) {
+            // Vérifier si c'est du texte lisible ou des caractères corrompus
+            if (isReadableText(line)) {
+                addMessage(`📨 ${line}`, 'info');
+            } else {
+                addMessage(`📨 [Binary/Corrupt data: ${line.length} bytes]`, 'warning');
+            }
+        }
+    };
+
+    const isReadableText = (str) => {
+        // Vérifier si la chaîne contient principalement des caractères imprimables
+        const printableChars = str.replace(/[\x20-\x7E\r\n\t]/g, '');
+        return printableChars.length < str.length * 0.3; // Moins de 30% de caractères non-imprimables
+    };
+
+    const getMessageClass = (type) => {
+        switch (type) {
+            case 'success': return 'text-green-600';
+            case 'error': return 'text-red-600';
+            case 'warning': return 'text-orange-600';
+            case 'sent': return 'text-blue-600 font-medium';
+            default: return 'text-gray-700';
+        }
+    };
+
+    const clearMessages = () => {
+        setMessages([]);
+    };
 
     const addMessage = (message, type = 'info') => {
         const timestamp = new Date().toLocaleTimeString();
@@ -35,94 +132,66 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
         }]);
     };
 
-    // Envoyer gcode sur SD et exécuter //
-    const calculateChecksum = (line) => {
-        let checksum = 0;
-        for (let i = 0; i < line.length; i++) {
-            checksum ^= line.charCodeAt(i);
+    // Streamer gcode //
+    const streamGcode = async (gcodeContent, jobName = 'Streaming Job') => {
+        setStreamProgress({ current: 0, total: 0, percent: 0 })
+
+        if (!port || !port.writable) {
+            addMessage('Port not available for streaming', 'error');
+            throw new Error('Port not available');
         }
-        return checksum;
-    };
-
-    const formatGcodeLine = (line, lineNumber) => {
-        const trimmedLine = line.trim();
-        if (!trimmedLine) return null;
-        
-        const numberedLine = `N${lineNumber} ${trimmedLine}`;
-        const checksum = calculateChecksum(numberedLine);
-        return `${numberedLine}*${checksum}`;
-    };
-
-    const sendToSDAndExecute = async (gcodeContent, filename) => {
-        const baseName = filename.replace(/\.[^/.]+$/, "");
-        const shortName = baseName.toUpperCase()
-            .replace(/[^A-Z0-9]/g, "")
-            .substring(0, 8);
-        const gcoFilename = `tmp.GCO`;
-        
-        try {
-            addMessage(`Écriture SD avec checksums de ${gcoFilename}...`, 'info');
-            
-            await sendCommand('M21');
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            await sendCommand(`M28 ${gcoFilename}`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            const lines = gcodeContent.split('\n').filter(line => line.trim() && !line.startsWith(';'));
-            const totalLines = lines.length;
-            const writer = port.writable.getWriter();
-            
-            const startTime = Date.now();
-            
-            for (let i = 0; i < lines.length; i++) {
-                const formattedLine = formatGcodeLine(lines[i].trim(), i + 1);
-                const data = new TextEncoder().encode(formattedLine + '\n');
-                await writer.write(data);
-                await new Promise(resolve => setTimeout(resolve, 30));
-                
-                // Afficher progression tous les 1% (ou minimum tous les 100 lignes)
-                const progressInterval = Math.max(100, Math.floor(totalLines / 1000));
-                
-                if ((i + 1) % progressInterval === 0 || i === totalLines - 1) {
-                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-                    const percent = (((i + 1) / totalLines) * 100).toFixed(1);
-                    const linesPerSec = ((i + 1) / elapsed).toFixed(0);
-                    const remainingLines = totalLines - (i + 1);
-                    const estimatedRemaining = (remainingLines / linesPerSec / 60).toFixed(1);
-                    
-                    addMessage(
-                        `📊 Progression: ${percent}% (${i + 1}/${totalLines}) | ` +
-                        `${linesPerSec} l/s | ~${estimatedRemaining}min restant`,
-                        'info'
-                    );
-                }
+    
+        // Créer un streamer avec le port existant
+        streamerRef.current = new GCodeStreamer(port, {
+            bufferSize: 4,
+            timeout: 5000,
+            onMessage: (message, type) => {
+                addMessage(message, type);
+            },
+            onProgress: (progress) => {
+                setStreamProgress(progress);
+                setJobProgress({ 
+                    current: progress.current, 
+                    total: progress.total 
+                });
             }
-            
-            writer.releaseLock();
-            
-            const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
-            addMessage(`✅ ${totalLines} lignes transférées en ${totalTime} minutes`, 'success');
-            
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            await sendCommand('M29');
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            await sendCommand(`M23 ${gcoFilename}`);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            await sendCommand('M24');
-            
-            addMessage(`${gcoFilename} créé avec checksums et lancé`, 'success');
-            
+        });
+    
+        setIsStreaming(true);
+        jobAbortControllerRef.current = new AbortController();
+    
+        try {
+            const result = await streamerRef.current.stream(gcodeContent, {
+                useLineNumbers: false,
+                jobName: jobName,
+                progressInterval: 100,
+                skipPauseCommands: true
+            });
+    
+            return result;
+    
         } catch (error) {
-            addMessage(`Erreur: ${error.message}`, 'error');
-            try {
-                await sendCommand('M29');
-            } catch (e) {}
+            addMessage(`Streaming failed: ${error.message}`, 'error');
             throw error;
+        } finally {
+            setIsStreaming(false);
+            streamerRef.current = null;
         }
     };
+    
+    // Fonction pour annuler le streaming
+    const abortStreaming = () => {
+        setStreamProgress({ current: 0, total: 0, percent: 0 })
+        if (streamerRef.current) {
+            streamerRef.current.abort();
+            setIsStreaming(false);
+            addMessage('Streaming annulé', 'warning');
+        }
+        if (jobAbortControllerRef.current) {
+            jobAbortControllerRef.current.abort();
+        }
+    };
+
 
     // Connexion serial
     const connect = async () => {
@@ -217,91 +286,7 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
         }
     };
 
-    // Console debbug
-    const startReading = async (selectedPort) => {
-        try {
-            const reader = selectedPort.readable.getReader();
-            readerRef.current = reader;
-            
-            let buffer = '';
-            
-            while (true) {
-                const { value, done } = await reader.read();
-                
-                if (done) {
-                    addMessage('Reading stopped', 'info');
-                    break;
-                }
-                
-                // Décoder les données reçues
-                const chunk = new TextDecoder('utf-8', { fatal: false }).decode(value);
-                buffer += chunk;
-                
-                // Traiter les lignes complètes (terminées par \n ou \r\n)
-                const lines = buffer.split(/\r?\n/);
-                buffer = lines.pop() || ''; // Garder la ligne incomplète
-                
-                for (const line of lines) {
-                    if (line.trim()) {
-                        processReceivedLine(line.trim());
-                    }
-                }
-            }
-        } catch (error) {
-            if (error.name !== 'AbortError') {
-                console.error('Error reading data:', error);
-                addMessage(`Reading error: ${error.message}`, 'error');
-            }
-        } finally {
-            if (readerRef.current) {
-                readerRef.current.releaseLock();
-                readerRef.current = null;
-            }
-        }
-    };
-
-    const processReceivedLine = (line) => {
-        // Filtrer et interpréter les réponses du firmware
-        if (line.startsWith('ok')) {
-            addMessage(`✓ ${line}`, 'success');
-        } else if (line.startsWith('Error') || line.startsWith('!!')) {
-            addMessage(`✗ ${line}`, 'error');
-        } else if (line.startsWith('echo:') || line.startsWith('FIRMWARE_NAME')) {
-            addMessage(`ℹ ${line}`, 'info');
-        } else if (line.match(/^[XYZ]:/)) {
-            addMessage(`📍 Position: ${line}`, 'info');
-        } else if (line.includes('temperature') || line.includes('temp')) {
-            addMessage(`🌡 ${line}`, 'info');
-        } else if (line.trim().length > 0) {
-            // Vérifier si c'est du texte lisible ou des caractères corrompus
-            if (isReadableText(line)) {
-                addMessage(`📨 ${line}`, 'info');
-            } else {
-                addMessage(`📨 [Binary/Corrupt data: ${line.length} bytes]`, 'warning');
-            }
-        }
-    };
-
-    const isReadableText = (str) => {
-        // Vérifier si la chaîne contient principalement des caractères imprimables
-        const printableChars = str.replace(/[\x20-\x7E\r\n\t]/g, '');
-        return printableChars.length < str.length * 0.3; // Moins de 30% de caractères non-imprimables
-    };
-
-    const getMessageClass = (type) => {
-        switch (type) {
-            case 'success': return 'text-green-600';
-            case 'error': return 'text-red-600';
-            case 'warning': return 'text-orange-600';
-            case 'sent': return 'text-blue-600 font-medium';
-            default: return 'text-gray-700';
-        }
-    };
-
-    const clearMessages = () => {
-        setMessages([]);
-    };
-
+    
     // Envoyer gcode
     const sendCommand = async (command) => {
         if (!port) {
@@ -362,93 +347,11 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
         });
     };
 
-    const abortJob = () => {
-        if (jobAbortControllerRef.current) {
-            jobAbortControllerRef.current.abort();
-        }
-    };
-
-    // Envoyer un job via port serie
-    const sendGcodeJob = async (gcodeContent, jobName = 'Print Job') => {
-        if (!port || !port.writable) {
-            addMessage('Port not available for G-code job', 'error');
-            return;
-        }
-
-        const lines = gcodeContent.split('\n').filter(line => {
-            const trimmed = line.trim();
-            return trimmed && !trimmed.startsWith(';'); // Ignorer les lignes vides et commentaires
-        });
-
-        if (lines.length === 0) {
-            addMessage('No valid G-code commands to send', 'warning');
-            return;
-        }
-
-        setIsExecutingJob(true);
-        setJobProgress({ current: 0, total: lines.length });
-        jobAbortControllerRef.current = new AbortController();
-
-        addMessage(`🚀 Starting job: ${jobName} (${lines.length} commands)`, 'info');
-
-        try {
-            for (let i = 0; i < lines.length; i++) {
-                if (jobAbortControllerRef.current?.signal.aborted) {
-                    addMessage('❌ Job aborted by user', 'warning');
-                    break;
-                }
-
-                const line = lines[i].trim();
-                await sendCommand(line);
-
-                // Attendre la confirmation "ok" pour certaines commandes importantes
-                if (line.startsWith('G') || line.startsWith('M280')) {
-                    await waitForOk();
-                }
-
-                setJobProgress({ current: i + 1, total: lines.length });
-            }
-
-            if (!jobAbortControllerRef.current?.signal.aborted) {
-                addMessage(`✅ Job completed: ${jobName}`, 'success');
-            }
-        } catch (error) {
-            addMessage(`❌ Job error: ${error.message}`, 'error');
-        } finally {
-            setIsExecutingJob(false);
-            setJobProgress({ current: 0, total: 0 });
-            jobAbortControllerRef.current = null;
-        }
-    };
-
-    const waitForOk = () => {
-        return new Promise((resolve, reject) => {
-            let timeout;
-            const checkMessages = () => {
-                const lastMessage = messages[messages.length - 1];
-                if (lastMessage && lastMessage.text.includes('ok')) {
-                    clearTimeout(timeout);
-                    resolve();
-                } else {
-                    timeout = setTimeout(checkMessages, 50);
-                }
-            };
-            
-            // Timeout après 10 secondes
-            const maxTimeout = setTimeout(() => {
-                clearTimeout(timeout);
-                resolve(); // Continuer même sans confirmation
-            }, 10000);
-            
-            checkMessages();
-        });
-    };
-
-    useEffect(() => {
-        if (onSendGcode && isConnected) {
-            onSendGcode(sendGcodeJob);
-        }
-    }, [onSendGcode, isConnected]);
+    // useEffect(() => {
+    //     if (onSendGcode && isConnected) {
+    //         onSendGcode(sendGcodeJob);
+    //     }
+    // }, [onSendGcode, isConnected]);
 
     useEffect(() => {
         // Nettoyage lors du démontage du composant
@@ -462,22 +365,24 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     
 
     return (
-        <div className="mt-4">
-            <h2 className="text-lg font-bold mb-4">Plotter connection</h2>
+        <div className="mt-2">
+            <h2 className="text-lg font-bold mb-4">Serial connection</h2>
             
-            <div className="mb-4 grid grid-cols-3 gap-2">
-                <button
-                    onClick={isConnected ? disconnect : connect}
-                    className={`px-4 py-2 rounded ${
-                        isConnected 
-                            ? 'bg-red-500 hover:bg-red-600' 
-                            : 'bg-blue-500 hover:bg-blue-600'
-                    } text-white`}
-                >
-                    {isConnected ? 'Disconnect' : 'Connect'}
-                </button>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+                {!isStreaming && (
+                    <button
+                        onClick={isConnected ? disconnect : connect}
+                        className={`px-4 py-2 rounded ${
+                            isConnected 
+                                ? 'bg-red-500 hover:bg-red-600' 
+                                : 'bg-blue-500 hover:bg-blue-600'
+                        } text-white`}
+                    >
+                        {isConnected ? 'Disconnect' : 'Connect'}
+                    </button>
+                )}
                 
-                {isConnected && !isExecutingJob && (
+                {isConnected && !isStreaming && (
                     <button
                         onClick={sendTestCommands}
                         className="px-4 py-2 rounded bg-green-500 hover:bg-green-600 text-white"
@@ -486,33 +391,49 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                     </button>
                 )}
 
-                {isExecutingJob && (
+                {isStreaming && (
                     <button
-                        onClick={abortJob}
-                        className="px-4 py-2 rounded bg-orange-500 hover:bg-orange-600 text-white"
+                        onClick={abortStreaming}
+                        className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white"
                     >
                         Abort Job
                     </button>
                 )}
             </div>
 
-            {/* Progress bar pour les jobs */}
-            {isExecutingJob && (
+            
+            {isStreaming && (
                 <div className="mb-4">
-                    <div className="flex justify-between text-sm text-gray-600 mb-1">
-                        <span>Progress</span>
-                        <span>{jobProgress.current}/{jobProgress.total}</span>
+                    {/* Stream en cours */}
+                    {/* <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded"> */}
+                        <div className="flex justify-between items-center mb-2">
+                            <span className="text-xs font-medium">
+                                Streaming en cours... {streamProgress.current}/{streamProgress.total}
+                            </span>
+                            
+                        </div>
+                        <div className="text-xs text-gray-600 mb-2">
+                            {streamProgress.linesPerSec} l/s | 
+                            Buffer: {streamProgress.bufferUsed}/4 | 
+                            ETA: ~{streamProgress.eta}min
+                        </div>
+                    {/* </div> */}
+                
+                    {/* Progress bar */}
+                    <div className="flex justify-between text-sm text-gray-600 mb-2">
+                        <span className="text-xs font-medium">Progress</span>
+                        <span>{streamProgress.percent.toFixed(1)}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                         <div 
                             className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                            style={{ width: `${(jobProgress.current / jobProgress.total) * 100}%` }}
+                            style={{ width: `${(streamProgress.current / streamProgress.total) * 100}%` }}
                         ></div>
                     </div>
                 </div>
             )}
 
-            {isConnected && !isExecutingJob && (
+            {isConnected && !isStreaming && (
                 <form onSubmit={handleCommandSubmit} className="mb-4 flex gap-2">
                     <input
                         type="text"
@@ -530,7 +451,9 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                 </form>
             )}
 
-            <div className="flex justify-between items-center mb-2">
+
+            {/* Status */}
+            {/* <div className="flex justify-between items-center mb-2">
                 <span className="text-sm text-gray-600">
                     Status: {isConnected ? `Connected (${serialConfig.baudRate} baud)` : 'Disconnected'}
                 </span>
@@ -540,9 +463,10 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                 >
                     Clear
                 </button>
-            </div>
+            </div> */}
 
-            <div className="p-3 bg-black text-green-400 rounded max-h-60 overflow-auto font-mono text-sm">
+            {/* Console */}
+            {/* <div className="p-3 bg-black text-green-400 rounded max-h-60 overflow-auto font-mono text-sm">
                 {messages.length === 0 ? (
                     <div className="text-gray-500">No messages yet...</div>
                 ) : (
@@ -552,7 +476,7 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                         </div>
                     ))
                 )}
-            </div>
+            </div> */}
         </div>
     );
 });
