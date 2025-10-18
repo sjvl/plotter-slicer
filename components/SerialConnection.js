@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
-import GCodeStreamer from '../utils/GCodeStreamer';
 
 const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     const [isConnected, setIsConnected] = useState(false);
@@ -12,7 +11,7 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     const readerRef = useRef(null);
     const abortControllerRef = useRef(null);
     const jobAbortControllerRef = useRef(null);
-    const streamerRef = useRef(null);
+    const workerRef = useRef(null);
 
 
     // Configuration
@@ -76,15 +75,18 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     };
 
     const processReceivedLine = (line) => {
-        // Si streaming actif, le streamer gère les "ok"
-        if (streamerRef.current?.isActive()) {
-            streamerRef.current.processLine(line);
-            return;
+        // Si streaming actif, envoyer la ligne au worker
+        if (workerRef.current) {
+            workerRef.current.postMessage({
+                type: 'INCOMING_LINE',
+                data: { line }
+            });
+            // Ne PAS return ici - laisser l'affichage normal aussi
         }
-
-        // Filtrer et interpréter les réponses du firmware
+    
+        // Traitement normal (ton code existant)
         if (line.startsWith('ok')) {
-            addMessage(`✓ ${line}`, 'success');
+            // addMessage(`✓ ${line}`, 'success');
         } else if (line.startsWith('Error') || line.startsWith('!!')) {
             addMessage(`✗ ${line}`, 'error');
         } else if (line.startsWith('echo:') || line.startsWith('FIRMWARE_NAME')) {
@@ -94,7 +96,6 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
         } else if (line.includes('temperature') || line.includes('temp')) {
             addMessage(`🌡 ${line}`, 'info');
         } else if (line.trim().length > 0) {
-            // Vérifier si c'est du texte lisible ou des caractères corrompus
             if (isReadableText(line)) {
                 addMessage(`📨 ${line}`, 'info');
             } else {
@@ -132,61 +133,128 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
         }]);
     };
 
-    // Streamer gcode //
+    // streamGcode with worker
     const streamGcode = async (gcodeContent, jobName = 'Streaming Job') => {
-        setStreamProgress({ current: 0, total: 0, percent: 0 })
-
+        setStreamProgress({ current: 0, total: 0, percent: 0 });
+    
         if (!port || !port.writable) {
             addMessage('Port not available for streaming', 'error');
             throw new Error('Port not available');
         }
     
-        // Créer un streamer avec le port existant
-        streamerRef.current = new GCodeStreamer(port, {
-            bufferSize: 4,
-            timeout: 5000,
-            onMessage: (message, type) => {
-                addMessage(message, type);
-            },
-            onProgress: (progress) => {
-                setStreamProgress(progress);
-                setJobProgress({ 
-                    current: progress.current, 
-                    total: progress.total 
-                });
-            }
-        });
+        // Créer le worker
+        workerRef.current = new Worker('/streamingWorker.js');
     
         setIsStreaming(true);
         jobAbortControllerRef.current = new AbortController();
     
-        try {
-            const result = await streamerRef.current.stream(gcodeContent, {
-                useLineNumbers: false,
-                jobName: jobName,
-                progressInterval: 100,
-                skipPauseCommands: true
+        return new Promise((resolve, reject) => {
+            // Écouter les messages du worker
+            workerRef.current.onmessage = async (event) => {
+                const { type, data, message, level, line, command, result, error } = event.data;
+    
+                switch (type) {
+                    case 'WRITE_LINE':
+                        // Le worker demande d'écrire une ligne
+                        try {
+                            const writer = port.writable.getWriter();
+                            const encoded = new TextEncoder().encode(line + '\n');
+                            await writer.write(encoded);
+                            writer.releaseLock();
+                        } catch (err) {
+                            console.error('Write error:', err);
+                            workerRef.current.postMessage({ type: 'ABORT' });
+                        }
+                        break;
+    
+                    case 'SEND_BREAK':
+                        // Envoyer M108 pour sortir de pause
+                        try {
+                            const writer = port.writable.getWriter();
+                            const encoded = new TextEncoder().encode(command + '\n');
+                            await writer.write(encoded);
+                            writer.releaseLock();
+                            addMessage('📤 M108 envoyé', 'info');
+                        } catch (err) {
+                            console.error('Break command error:', err);
+                        }
+                        break;
+    
+                    case 'LOG':
+                        // Afficher les messages
+                        addMessage(message, level);
+                        break;
+    
+                    case 'PROGRESS':
+                        // Mettre à jour la progression
+                        setStreamProgress(data);
+                        addMessage(
+                            `📊 ${data.percent}% (${data.current}/${data.total}) | ` +
+                            `${data.linesPerSec} l/s | Buffer: ${data.bufferUsed}/4 | ` +
+                            `ETA: ~${data.eta}min`,
+                            'info'
+                        );
+                        break;
+    
+                    case 'COMPLETE':
+                        // Streaming terminé
+                        addMessage(
+                            `✅ Terminé en ${result.duration}min (${result.linesStreamed} lignes)`,
+                            'success'
+                        );
+                        setIsStreaming(false);
+                        workerRef.current.terminate();
+                        workerRef.current = null;
+                        resolve(result);
+                        break;
+    
+                    case 'ERROR':
+                        // Erreur
+                        addMessage(`❌ Erreur: ${error}`, 'error');
+                        setIsStreaming(false);
+                        workerRef.current.terminate();
+                        workerRef.current = null;
+                        reject(new Error(error));
+                        break;
+                }
+            };
+    
+            workerRef.current.onerror = (error) => {
+                console.error('Worker error:', error);
+                addMessage(`Worker error: ${error.message}`, 'error');
+                setIsStreaming(false);
+                reject(error);
+            };
+    
+            // Démarrer le streaming
+            workerRef.current.postMessage({
+                type: 'START_STREAMING',
+                data: {
+                    gcode: gcodeContent,
+                    options: {
+                        useLineNumbers: false,
+                        jobName: jobName,
+                        progressInterval: 100,
+                        skipPauseCommands: true
+                    }
+                }
             });
-    
-            return result;
-    
-        } catch (error) {
-            addMessage(`Streaming failed: ${error.message}`, 'error');
-            throw error;
-        } finally {
-            setIsStreaming(false);
-            streamerRef.current = null;
-        }
+        });
     };
     
-    // Fonction pour annuler le streaming
+    // abortStreaming with worker
     const abortStreaming = () => {
-        setStreamProgress({ current: 0, total: 0, percent: 0 })
-        if (streamerRef.current) {
-            streamerRef.current.abort();
-            setIsStreaming(false);
-            addMessage('Streaming annulé', 'warning');
+        setStreamProgress({ current: 0, total: 0, percent: 0 });
+        
+        if (workerRef.current) {
+            workerRef.current.postMessage({ type: 'ABORT' });
+            workerRef.current.terminate();
+            workerRef.current = null;
         }
+        
+        setIsStreaming(false);
+        addMessage('Streaming annulé', 'warning');
+        
         if (jobAbortControllerRef.current) {
             jobAbortControllerRef.current.abort();
         }
@@ -360,9 +428,12 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                 disconnect();
             }
         };
-    }, []);
 
-    
+
+        if (workerRef.current) {
+            workerRef.current.terminate();
+        }
+    }, []);    
 
     return (
         <div className="mt-2">
