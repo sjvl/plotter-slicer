@@ -185,14 +185,10 @@ const PlotterApp = () => {
 
 
   useEffect(() => {
-    // Reset du gcode quand la config du papier change
+    // Reset du gcode quand la config change
     setGeneratedGcode(null);
-  }, [paperConfig]); 
-  
-  useEffect(() => {
-    // Reset du gcode quand le SVG change
-    setGeneratedGcode(null);
-  }, [svgContent]);
+    handleGenerateGcode();
+  }, [svgContent, paperConfig, speedSettings]); 
 
   useEffect(() => {
     const preventDefault = (e) => {
@@ -1539,7 +1535,7 @@ const PlotterApp = () => {
                 className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
                 onClick={() => fileInputRef.current?.click()}
               >
-                Importer SVG
+                Import SVG
               </button>
               <input
                 type="file"
@@ -1549,7 +1545,7 @@ const PlotterApp = () => {
                 onChange={handleFileUpload}
               />
   
-              <button 
+              {/* <button 
                 className={`w-full p-2 rounded ${
                   svgContent 
                     ? 'bg-green-500 text-white hover:bg-green-600' 
@@ -1558,8 +1554,8 @@ const PlotterApp = () => {
                 onClick={handleGenerateGcode}
                 disabled={!svgContent}
               >
-                Générer GCode
-              </button>
+                Slice into gcode
+              </button> */}
             </div>
           </div>
         </div>
