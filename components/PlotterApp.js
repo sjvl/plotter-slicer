@@ -1296,23 +1296,36 @@ const PlotterApp = () => {
     setGeneratedGcode(result.gcodeByColor);
     setTimeEstimations(result.timeEstimationByColor);
     
-    // Créer un fichier pour chaque couleur
-    Object.entries(result.gcodeByColor).forEach(([color, gcode]) => {
-      console.log(`Téléchargement ${color} (premiers 200 chars):`, gcode.substring(0, 200));
+    // // Créer un fichier pour chaque couleur
+    // Object.entries(result.gcodeByColor).forEach(([color, gcode]) => {
+    //   console.log(`Téléchargement ${color} (premiers 200 chars):`, gcode.substring(0, 200));
 
+    //   const baseFilename = fileInputRef.current?.files[0]?.name.replace('.svg', '') || 'output';
+    //   const filename = `${baseFilename}-${color}.gcode`;
+      
+    //   const blob = new Blob([gcode], { type: 'text/plain' });
+    //   const url = URL.createObjectURL(blob);
+    //   const link = document.createElement('a');
+    //   link.href = url;
+    //   link.download = filename;
+    //   document.body.appendChild(link);
+    //   link.click();
+    //   document.body.removeChild(link);
+    //   URL.revokeObjectURL(url);
+    // });
+  };
+
+  const handleDownloadGCode = (color, gcode) => {
       const baseFilename = fileInputRef.current?.files[0]?.name.replace('.svg', '') || 'output';
       const filename = `${baseFilename}-${color}.gcode`;
       
       const blob = new Blob([gcode], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
       URL.revokeObjectURL(url);
-    });
   };
 
   const GCodePreview = ({ gcode }) => {
@@ -1548,25 +1561,6 @@ const PlotterApp = () => {
                 Générer GCode
               </button>
             </div>
-  
-            {/* TIME */}
-            {generatedGcode && (
-              <div className="mt-4 p-3 bg-gray-100 rounded-lg">
-                <h3 className="font-bold text-sm mb-2">Estimated time</h3>
-                {Object.entries(timeEstimations).map(([color, estimation]) => (
-                  <div key={color} className="mb-0">
-                    <div className="flex items-center">
-                      <div 
-                        className="w-2 h-2 rounded-full mr-2" 
-                        style={{backgroundColor: color}}
-                      ></div>
-                      <span className="text-xs font-medium">{color}:</span>
-                      <span className="text-xs ml-2">{estimation.formattedTime}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
   
@@ -1714,36 +1708,54 @@ const PlotterApp = () => {
           <div className="p-4 control-panel-scroll">
             <SerialConnection 
               ref={setSerialConnectionRef}
-              onSendGcode={(sendFunction) => {
-                // Optionnel : stocker la fonction d'envoi si besoin
-              }}
             />
 
+          <h2 className="text-lg font-bold mt-6">Gcode by colors</h2>
+          {/* TIME */}
             {generatedGcode && (
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                <h3 className="font-bold text-sm mb-2">Jobs</h3>
-                <div className="space-y-3">
-                  {Object.entries(generatedGcode).map(([color, gcode]) => (
-                    <div key={color} className="space-y-1">
-                      {/*Bouton Streaming */}
-                      <button
-                        className={`w-full px-3 py-2 rounded text-sm font-medium transition-colors flex items-center mb-1 ${
-                          serialConnectionRef?.isConnected && !serialConnectionRef?.isStreaming
-                            ? `bg-green-500 text-${color} hover:bg-green-600`
-                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        }`}
-                        onClick={() => handleStreamGCode(color, gcode)}
-                        disabled={!serialConnectionRef?.isConnected && !serialConnectionRef?.isStreaming}
-                      >
+              <div>
+                {Object.entries(generatedGcode).map(([color, gcode]) => (
+                  <div key={color} className="pt-3 bg-white rounded-lg shadow-sm">
+                    {/* Header avec couleur et temps */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center">
                         <div 
                           className="w-3 h-3 rounded-full mr-2" 
                           style={{backgroundColor: color}}
                         ></div>
-                        Draw {color} ⚡ 
+                        <span className="text-sm font-medium">{color}</span>
+                      </div>
+                      {timeEstimations[color] && (
+                        <span className="text-xs text-gray-600">
+                          ⏱️ {timeEstimations[color].formattedTime}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex space-x-2">
+                      {/* Bouton Streaming */}
+                      <button
+                        className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                          serialConnectionRef?.isConnected && !serialConnectionRef?.isStreaming
+                            ? 'bg-green-500 text-white hover:bg-green-600'
+                            : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
+                        onClick={() => handleStreamGCode(color, gcode)}
+                        disabled={!serialConnectionRef?.isConnected || serialConnectionRef?.isStreaming}
+                      >
+                        ⚡ Draw
+                      </button>
+
+                      {/* Bouton Download */}
+                      <button
+                        className="flex-1 px-3 py-2 rounded text-sm font-medium transition-colors bg-blue-500 text-white hover:bg-blue-600"
+                        onClick={() => handleDownloadGCode(color, gcode)}
+                      >
+                        Download
                       </button>
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

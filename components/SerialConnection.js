@@ -504,7 +504,7 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                 </div>
             )}
 
-            {isConnected && !isStreaming && (
+            {/* {isConnected && !isStreaming && (
                 <form onSubmit={handleCommandSubmit} className="mb-4 flex gap-2">
                     <input
                         type="text"
@@ -520,7 +520,7 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                         Send
                     </button>
                 </form>
-            )}
+            )} */}
 
 
             {/* Status */}
