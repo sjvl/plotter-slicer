@@ -579,14 +579,19 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
             )}
 
             {/* DEBUG */}
-            <div className="mb-4 grid grid-cols-2 gap-2">
-                <button
-                    onClick={handleDebug}
-                    className="px-4 py-2 rounded bg-yellow-500 hover:bg-yellow-600 text-white"
-                >
-                    debug mode
-                </button>
+            <div className="mb-4 flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Debug mode</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                        type="checkbox"
+                        checked={toggleDebug}
+                        onChange={() => setToggleDebug(!toggleDebug)}
+                        className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-yellow-500"></div>
+                </label>
             </div>
+            
             {toggleDebug &&(
                 <>
                     {isConnected && !isStreaming && (

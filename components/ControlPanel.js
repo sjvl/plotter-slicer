@@ -1,6 +1,6 @@
 // components/ControlPanel.js
 
-import React, { useRef } from 'react';
+import React from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 
 const ControlPanel = ({
@@ -14,11 +14,8 @@ const ControlPanel = ({
   onPaperConfigChange,
   selectedFormat,
   onFormatChange,
-  paperFormats,
-  onFileUpload
+  paperFormats
 }) => {
-  const fileInputRef = useRef(null);
-
   const handleDimensionChange = (dimension, value) => {
     const newConfig = {
       ...paperConfig,
@@ -97,7 +94,7 @@ const ControlPanel = ({
             type="checkbox"
             checked={optimizePaths}
             onChange={(e) => onOptimizePathsChange(e.target.checked)}
-            className="mr-2 w-4 h-4"
+            className="mr-2 w-4 h-4 accent-gray-600"
           />
           <h3>Path Optimization</h3>
         </label>
@@ -205,23 +202,6 @@ const ControlPanel = ({
               />
             </div>
           </div>
-        </div>
-          
-        {/* BUTTONS */}
-        <div className="space-y-2 mt-6">
-          <button 
-            className="w-full p-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            Import SVG
-          </button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept=".svg"
-            onChange={onFileUpload}
-          />
         </div>
       </div>
     </div>

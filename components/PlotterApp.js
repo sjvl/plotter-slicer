@@ -172,7 +172,6 @@ const PlotterApp = () => {
           selectedFormat={selectedFormat}
           onFormatChange={setSelectedFormat}
           paperFormats={paperFormats}
-          onFileUpload={handleFileUpload}
         />
   
         {/* Prévisualisation */}
@@ -205,6 +204,7 @@ const PlotterApp = () => {
           fileName={fileName}
           onStreamGCode={handleStreamGCode}
           onDownloadGCode={handleDownloadGCode}
+          onFileUpload={handleFileUpload}
         />
       </div>
     </div>
