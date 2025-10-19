@@ -21,8 +21,10 @@ const PlotterApp = () => {
   });
 
   const [machineConfig, setMachineConfig] = useState({
-    width: 655,
-    height: 1030,
+    // width: 655,
+    // height: 1030,
+    width: 650,
+    height: 1000,
   });
 
   const [canvas, setCanvas] = useState({
@@ -33,6 +35,8 @@ const PlotterApp = () => {
   const [svgContent, setSvgContent] = useState(null);
   const [svgViewBox, setSvgViewBox] = useState({ width: 0, height: 0 });
   const fileInputRef = useRef(null);
+  const svgRef = useRef(null);
+
 
   const [generatedGcode, setGeneratedGcode] = useState(null);
   const [timeEstimations, setTimeEstimations] = useState({});
@@ -55,8 +59,15 @@ const PlotterApp = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  const [speedSettings, setSpeedSettings] = useState({
-    travelSpeed: 3000,  // acceleration
+  const [speedSettings, setSpeedSettings] = useState({travelSpeed: 150});
+
+  const [pointJoiningRadius, setPointJoiningRadius] = useState(0.5); // mm par défaut
+  const [optimizePaths, setOptimizePaths] = useState(true); // Activé par défaut
+  const [debouncedParams, setDebouncedParams] = useState({
+    pointJoiningRadius,
+    optimizePaths,
+    speedSettings,
+    paperConfig
   });
 
   const [serialConnectionRef, setSerialConnectionRef] = useState(null);
@@ -158,7 +169,6 @@ const PlotterApp = () => {
     setIsDragging(false);
   };
 
-  // Handler pour le changement de format
   const handleFormatChange = (format) => {
     setSelectedFormat(format);
     setPaperConfig({
@@ -183,29 +193,49 @@ const PlotterApp = () => {
     setSelectedFormat(formatMatch ? formatMatch[0] : 'custom');
   };
 
-
+  // Debounce de 500ms
   useEffect(() => {
-    // Reset du gcode quand la config change
+    const timer = setTimeout(() => {
+      setDebouncedParams({
+        pointJoiningRadius,
+        optimizePaths,
+        speedSettings,
+        paperConfig
+      });
+    }, 500); // Attendre 500ms après le dernier changement
+  
+    return () => clearTimeout(timer);
+  }, [pointJoiningRadius, optimizePaths, speedSettings, paperConfig]);
+
+  // Reset du gcode quand la config change
+  useEffect(() => {
     setGeneratedGcode(null);
-    handleGenerateGcode();
-  }, [svgContent, paperConfig, speedSettings]); 
+  }, [svgContent, paperConfig, speedSettings, pointJoiningRadius, optimizePaths]); 
 
   useEffect(() => {
-    const preventDefault = (e) => {
-      if (e.ctrlKey) {  // Si c'est un zoom avec Ctrl + molette
-        e.preventDefault();
-      }
+    setGeneratedGcode(null);
+    if (svgContent && svgViewBox) {
+      handleGenerateGcode();
+    }
+  }, [svgContent, debouncedParams]);
+
+
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+  
+    const handleWheelEvent = (e) => {
+      e.preventDefault();
+      handleWheel(e);
     };
   
-    // Cibler spécifiquement le conteneur de prévisualisation
-    const container = document.querySelector('.preview-container');
-    container?.addEventListener('wheel', preventDefault, { passive: false });
+    svg.addEventListener('wheel', handleWheelEvent, { passive: false });
   
     return () => {
-      container?.removeEventListener('wheel', preventDefault);
+      svg.removeEventListener('wheel', handleWheelEvent);
     };
   }, []);
-
+  
   const calculateDrawingArea = () => {
     const width = paperConfig.width - paperConfig.marginLeft - paperConfig.marginRight;
     const height = paperConfig.height - paperConfig.marginTop - paperConfig.marginBottom;
@@ -543,6 +573,7 @@ const PlotterApp = () => {
         points.push(`${point.x},${point.y}`);
       }
       
+      // NOUVEAU : Simplifier les points
       return points;
     };
 
@@ -1009,9 +1040,31 @@ const PlotterApp = () => {
     };
   };
 
+  const simplifyPoints = (points, minDistance) => {
+    if (points.length < 2 || minDistance <= 0) return points;
+    
+    const simplified = [points[0]];
+    
+    for (let i = 1; i < points.length; i++) {
+      const last = simplified[simplified.length - 1];
+      const current = points[i];
+      const dist = Math.hypot(current.x - last.x, current.y - last.y);
+      
+      if (dist >= minDistance) {
+        simplified.push(current);
+      }
+    }
+    
+    // Toujours garder le dernier point
+    if (simplified[simplified.length - 1] !== points[points.length - 1]) {
+      simplified.push(points[points.length - 1]);
+    }
+    
+    return simplified;
+  };
+
   const calculateDrawTime = (gcodeContent, travelSpeed) => {
-    // Convertir mm/min en mm/s pour faciliter le calcul
-    const travelSpeedMmSec = travelSpeed / 60;
+    const travelSpeedMmSec = travelSpeed;
     
     // Variables pour le calcul
     let travelDistance = 0;
@@ -1025,7 +1078,7 @@ const PlotterApp = () => {
     
     // Facteur d'ajustement empirique
     const adjustmentFactor = 0.00007 * travelSpeed + 0.79;  // 15% de plus que le calcul théorique
-    console.log(adjustmentFactor)
+    // const adjustmentFactor = 1;
     
     // Paramètres d'accélération (mm/s²)
     const acceleration = 800;  // Valeur typique pour un plotter
@@ -1161,7 +1214,158 @@ const PlotterApp = () => {
     };
   };
 
-  const generateGcode = (svgContent, paperConfig, svgViewBox, machineConfig) => {
+  const optimizePathOrder = (paths, scale, drawingArea, svgViewBox, paperConfig, machineConfig) => {
+    if (paths.length <= 1) return paths;
+    
+    // Fonction pour extraire le premier point d'un path
+    const getFirstPoint = (path) => {
+      const d = path.getAttribute('d');
+      const match = d.match(/M\s*(-?\d+\.?\d*)\s+(-?\d+\.?\d*)/);
+      if (match) {
+        return transformCoord({
+          x: parseFloat(match[1]),
+          y: parseFloat(match[2]),
+          scale,
+          drawingArea,
+          svgViewBox,
+          paperConfig,
+          machineConfig
+        });
+      }
+      return { x: 0, y: 0 };
+    };
+    
+    // Fonction pour extraire le dernier point d'un path
+    const getLastPoint = (path) => {
+      const d = path.getAttribute('d');
+      const coords = d
+        .replace(/,/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(/(?=[ML])/);
+      
+      // Prendre la dernière commande
+      const lastCmd = coords[coords.length - 1];
+      const numbers = lastCmd.slice(1).trim().split(/\s+/).map(Number);
+      
+      if (numbers.length >= 2) {
+        const x = numbers[numbers.length - 2];
+        const y = numbers[numbers.length - 1];
+        return transformCoord({
+          x,
+          y,
+          scale,
+          drawingArea,
+          svgViewBox,
+          paperConfig,
+          machineConfig
+        });
+      }
+      return { x: 0, y: 0 };
+    };
+    
+    // Calculer la distance entre deux points
+    const distance = (p1, p2) => {
+      return Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    };
+    
+    // Précalculer les points de début et fin pour chaque path
+    const pathsWithPoints = paths.map(path => ({
+      path,
+      start: getFirstPoint(path),
+      end: getLastPoint(path)
+    }));
+    
+    const optimized = [];
+    const remaining = [...pathsWithPoints];
+    
+    // Commencer au point (0, 0) - position home
+    let currentPos = { x: 0, y: 0 };
+    
+    while (remaining.length > 0) {
+      let minDist = Infinity;
+      let minIndex = 0;
+      let shouldReverse = false;
+      
+      // Trouver le path le plus proche (en considérant les deux extrémités)
+      for (let i = 0; i < remaining.length; i++) {
+        const pathInfo = remaining[i];
+        
+        // Distance vers le début du path
+        const distToStart = distance(currentPos, pathInfo.start);
+        if (distToStart < minDist) {
+          minDist = distToStart;
+          minIndex = i;
+          shouldReverse = false;
+        }
+        
+        // Distance vers la fin du path (on pourrait le dessiner à l'envers)
+        const distToEnd = distance(currentPos, pathInfo.end);
+        if (distToEnd < minDist) {
+          minDist = distToEnd;
+          minIndex = i;
+          shouldReverse = true;
+        }
+      }
+      
+      // Extraire le path choisi
+      const chosen = remaining.splice(minIndex, 1)[0];
+      
+      // Inverser le path si nécessaire
+      if (shouldReverse) {
+        const reversedPath = reversePathDirection(chosen.path);
+        optimized.push(reversedPath);
+        currentPos = chosen.start; // Nouvelle position = ancien début
+      } else {
+        optimized.push(chosen.path);
+        currentPos = chosen.end; // Nouvelle position = fin du path
+      }
+    }
+    
+    return optimized;
+  };
+
+  const reversePathDirection = (path) => {
+    const d = path.getAttribute('d');
+    const commands = d
+      .replace(/,/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .split(/(?=[ML])/);
+    
+    // Extraire tous les points
+    const points = [];
+    commands.forEach(cmd => {
+      const type = cmd.trim()[0];
+      const coords = cmd.slice(1).trim().split(/\s+/).map(Number);
+      
+      for (let i = 0; i < coords.length; i += 2) {
+        if (i + 1 < coords.length) {
+          points.push({ x: coords[i], y: coords[i + 1] });
+        }
+      }
+    });
+    
+    // Inverser l'ordre des points
+    points.reverse();
+    
+    // Reconstruire le path
+    let newD = '';
+    if (points.length > 0) {
+      newD = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length; i++) {
+        newD += ` L ${points[i].x} ${points[i].y}`;
+      }
+    }
+    
+    // Créer un nouveau path avec la direction inversée
+    const newPath = path.cloneNode(true);
+    newPath.setAttribute('d', newD);
+    
+    return newPath;
+  };
+
+  const generateGcode = (svgContent, paperConfig, svgViewBox, machineConfig, optimizePaths, pointJoiningRadius) => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgContent, 'image/svg+xml');
     
@@ -1211,53 +1415,95 @@ const PlotterApp = () => {
       gcode.push("G28 X Y");
       gcode.push("M280 P0 S90 T250");
       gcode.push(`M0 ${color} pen and click`);
+      
       let isPenDown = false;
-      const travelSpeed = speedSettings.travelSpeed;
+      const travelSpeed = speedSettings.travelSpeed * 60; // pour passer en mm/min
+
+      // Optimiser l'ordre des paths si activé
+      const orderedPaths = optimizePaths 
+      ? optimizePathOrder(paths, scale, drawingArea, svgViewBox, paperConfig, machineConfig)
+      : paths;
       
       // Traiter les paths de cette couleur
-      paths.forEach(path => {
+      orderedPaths.forEach(path => {
         const pathData = path.getAttribute('d')
-          .replace(/,/g, ' ')     // Remplacer les virgules par des espaces
-          .replace(/\s+/g, ' ')   // Normaliser les espaces
-          .trim()                 // Retirer les espaces aux extrémités
-          .split(/(?=[ML])/);     // Séparer uniquement sur M et L
+          .replace(/,/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .split(/(?=[ML])/);
         
-          pathData.forEach(cmd => {
-            const type = cmd.trim()[0];
-            // Diviser tous les nombres en paires
-            const coords = cmd.slice(1).trim().split(/\s+/).map(Number);
+        let currentSegment = [];
+        let currentType = null;
+        
+        const processCurrentSegment = () => {
+          if (currentSegment.length === 0) return;
+          
+          // console.log(`⚙️ Processing segment: type=${currentType}, points=${currentSegment.length}`);  // ← AJOUTER
+          
+          let simplifiedPoints = currentSegment;
+          
+          if (pointJoiningRadius > 0 && currentSegment.length > 2) {
+            // console.log(`🔧 Simplification: ${currentSegment.length} points`);
+            simplifiedPoints = simplifyPoints(currentSegment, pointJoiningRadius);
+            // console.log(`✅ Résultat: ${simplifiedPoints.length} points`);
+          }
+          
+          simplifiedPoints.forEach((point, i) => {
+            const transformedPoint = transformCoord({
+              x: point.x,
+              y: point.y,
+              scale,
+              drawingArea,
+              svgViewBox,
+              paperConfig,
+              machineConfig
+            });
             
-            // Traiter les nombres deux par deux
-            for (let i = 0; i < coords.length; i += 2) {
-              if (i + 1 < coords.length) { // Vérifier qu'on a bien une paire de coordonnées
-                const point = transformCoord({
-                  x: coords[i],
-                  y: coords[i+1],
-                  scale,
-                  drawingArea,
-                  svgViewBox,
-                  paperConfig,
-                  machineConfig
-                });
-                
-                if (type === 'M' && i === 0) {
-                  // Premier point d'un segment M
-                  if (isPenDown) {
-                    gcode.push('M280 P0 S90 T250'); // Pen up
-                    isPenDown = false;
-                  }
-                  gcode.push(`G0 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${travelSpeed}`);
-                } else {
-                  // Tous les autres points sont des lignes
-                  if (!isPenDown) {
-                    gcode.push('M280 P0 S25 T150'); // Pen down
-                    isPenDown = true;
-                  }
-                  gcode.push(`G1 X${point.x.toFixed(3)} Y${point.y.toFixed(3)} F${travelSpeed}`);
-                }
+            if (i === 0 && currentType === 'M') {
+              // console.log('🔼 Pen UP + Move');
+              if (isPenDown) {
+                gcode.push('M280 P0 S90 T50');
+                isPenDown = false;
               }
+              gcode.push(`G0 X${transformedPoint.x.toFixed(3)} Y${transformedPoint.y.toFixed(3)} F${travelSpeed}`);
+            } else {
+              if (!isPenDown) {
+                // console.log('🔽 Pen DOWN');
+                gcode.push('M280 P0 S25 T50');
+                isPenDown = true;
+              }
+              gcode.push(`G1 X${transformedPoint.x.toFixed(3)} Y${transformedPoint.y.toFixed(3)} F${travelSpeed}`);
             }
           });
+        };
+        
+        pathData.forEach(cmd => {
+          const type = cmd.trim()[0];
+          const coords = cmd.slice(1).trim().split(/\s+/).map(Number);
+          
+          // console.log(`📍 Type: ${type}, Coords: ${coords.length}`);
+          
+          if (type === 'M') {
+            // Traiter le segment précédent
+            processCurrentSegment();
+            
+            // Nouveau segment avec Move
+            currentSegment = [{ x: coords[0], y: coords[1] }];
+            currentType = 'M';  // ← Type = M pour ce nouveau segment
+          } else if (type === 'L') {
+            // Continuer le segment en cours
+            for (let i = 0; i < coords.length; i += 2) {
+              if (i + 1 < coords.length) {
+                currentSegment.push({ x: coords[i], y: coords[i + 1] });
+              }
+            }
+            // NE PAS CHANGER currentType !
+            // Il reste à 'M' si on a commencé avec un M
+          }
+        });
+        
+        // Ne pas oublier le dernier segment
+        processCurrentSegment();
       });
       
       if (isPenDown) {
@@ -1286,7 +1532,14 @@ const PlotterApp = () => {
   const handleGenerateGcode = () => {
     if (!svgContent || !svgViewBox) return;
     
-    const result = generateGcode(svgContent, paperConfig, svgViewBox, machineConfig);
+    const result = generateGcode(
+      svgContent, 
+      paperConfig, 
+      svgViewBox, 
+      machineConfig,
+      optimizePaths,
+      pointJoiningRadius
+    );
     
     // Mettre à jour l'état pour la prévisualisation
     setGeneratedGcode(result.gcodeByColor);
@@ -1402,11 +1655,11 @@ const PlotterApp = () => {
             <h1 className="text-3xl font-bold">Plotter slicer</h1>
             <p className="text-xs mb-4">for <a href="https://www.marginallyclever.com/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">Makelangelo 5</a> by <a href="https://sjvl.notion.site/" target="_blank" className="text-blue-500 no-underline hover:text-blue-700">sjvl</a></p>
   
-            {/* SPEEDS */}
-            <h2 className="text-lg font-bold mb-1 mt-6">Acceleration (mm/min)</h2>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-2">
+                {/* SPEED */}
                 <div>
+                  <h2 className="text-lg font-bold mb-1 mt-6">Speed (mm/s)</h2>
                   <input
                     type="number"
                     className="w-full p-2 border rounded"
@@ -1417,9 +1670,34 @@ const PlotterApp = () => {
                     onChange={(e) => handleSpeedChange('travelSpeed', e.target.value)}
                   />
                 </div>
+                
+                {/* SIMPLIFICATION */}
+                <div >
+                  <h2 className="text-lg font-bold mb-1 mt-6">Point joining (mm)</h2>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    value={pointJoiningRadius}
+                    onChange={(e) => setPointJoiningRadius(parseFloat(e.target.value))}
+                  />
+                </div>
               </div>
             </div>
-  
+
+            {/* OPTIMIZATION */}
+            <label className="flex items-center cursor-pointer mb-1 mt-6">
+              <input
+                type="checkbox"
+                checked={optimizePaths}
+                onChange={(e) => setOptimizePaths(e.target.checked)}
+                className="mr-2 w-4 h-4"
+              />
+              <h3>Path Optimization</h3>
+            </label>
+
             {/* PAPER */}
             <h2 className="text-lg font-bold mb-1 mt-6">Paper (mm)</h2>
             <div className="space-y-4">
@@ -1544,49 +1822,36 @@ const PlotterApp = () => {
                 accept=".svg"
                 onChange={handleFileUpload}
               />
-  
-              {/* <button 
-                className={`w-full p-2 rounded ${
-                  svgContent 
-                    ? 'bg-green-500 text-white hover:bg-green-600' 
-                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                }`}
-                onClick={handleGenerateGcode}
-                disabled={!svgContent}
-              >
-                Slice into gcode
-              </button> */}
             </div>
           </div>
         </div>
   
         {/* Prévisualisation */}
         <div className="border rounded-lg md:col-span-2 bg-gray-100 min-h-0">
-          <div className="w-full h-full overflow-hidden preview-container touch-none">
+          <div className="w-full h-full overflow-hidden preview-container">
             <svg
+              ref={svgRef}
               viewBox={`0 0 ${canvas.width} ${canvas.height}`}
               className="w-full h-full bg-gray-100"
-              onWheel={(e) => {
-                e.preventDefault();  // Empêcher le zoom du navigateur
-                handleWheel(e);
-              }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
-              style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+              style={{ 
+                cursor: isDragging ? 'grabbing' : 'grab',
+              }}
             >
               <g transform={`translate(${viewTransform.x} ${viewTransform.y}) scale(${viewTransform.scale})`}>
                   {/* Zone de dessin totale du plotter */}
-                  {/* <rect
+                  <rect
                     x={(canvas.width - machineConfig.width) /2}
                     y={(canvas.height - machineConfig.height) /2}
                     width={machineConfig.width}
                     height={machineConfig.height}
-                    fill="#d1d1d1"
+                    fill="#e9e9e9"
                     stroke="gray"
                     strokeWidth="0.5"
-                  /> */}
+                  />
   
                   {/* Support machine */}
                   <rect

@@ -7,6 +7,7 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     const [inputCommand, setInputCommand] = useState('');
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamProgress, setStreamProgress] = useState({ current: 0, total: 0, percent: 0 });
+    const [toggleDebug, setToggleDebug] = useState(false)
 
     const readerRef = useRef(null);
     const abortControllerRef = useRef(null);
@@ -405,8 +406,8 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
             'M114', // Position actuelle
             'M280 P0 S90', // Lever le stylo
             'G28',  // Home
-            'M280 P0 S25', // Baisser le stylo
-            'M280 P0 S90', // Lever le stylo
+            // 'M280 P0 S25', // Baisser le stylo
+            // 'M280 P0 S90', // Lever le stylo
             'M84', // Relacher
         ];
         
@@ -414,6 +415,10 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
             setTimeout(() => sendCommand(cmd), index * 1000);
         });
     };
+
+    const handleDebug = () => {
+        setToggleDebug(!toggleDebug);
+    }
 
     // useEffect(() => {
     //     if (onSendGcode && isConnected) {
@@ -439,6 +444,7 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
         <div className="mt-2">
             <h2 className="text-lg font-bold mb-4">Serial connection</h2>
             
+            {/* Serial connection buttons */}
             <div className="mb-4 grid grid-cols-2 gap-2">
                 {!isStreaming && (
                     <button
@@ -470,27 +476,32 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                         Abort Job
                     </button>
                 )}
+
+                <button
+                    onClick={handleDebug}
+                    className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white"
+                >
+                    debug mode
+                </button>
             </div>
 
             
+            {/* Stream en cours */}
             {isStreaming && (
                 <div className="mb-4">
-                    {/* Stream en cours */}
-                    {/* <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded"> */}
-                        <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-medium">
-                                Streaming en cours... {streamProgress.current}/{streamProgress.total}
-                            </span>
-                            
-                        </div>
-                        <div className="text-xs text-gray-600 mb-2">
-                            {streamProgress.linesPerSec} l/s | 
-                            Buffer: {streamProgress.bufferUsed}/4 | 
-                            ETA: ~{streamProgress.eta}min
-                        </div>
-                    {/* </div> */}
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-xs font-medium">
+                            Streaming en cours... {streamProgress.current}/{streamProgress.total}
+                        </span>
+                        
+                    </div>
+
+                    <div className="text-xs text-gray-600 mb-2">
+                        {streamProgress.linesPerSec} l/s | 
+                        Buffer: {streamProgress.bufferUsed}/4 | 
+                        ETA: ~{streamProgress.eta}min
+                    </div>
                 
-                    {/* Progress bar */}
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                         <span className="text-xs font-medium">Progress</span>
                         <span>{streamProgress.percent.toFixed(1)}%</span>
@@ -504,50 +515,55 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
                 </div>
             )}
 
-            {/* {isConnected && !isStreaming && (
-                <form onSubmit={handleCommandSubmit} className="mb-4 flex gap-2">
-                    <input
-                        type="text"
-                        value={inputCommand}
-                        onChange={(e) => setInputCommand(e.target.value)}
-                        placeholder="Enter G-code command (e.g., M115, G28, M114)"
-                        className="flex-1 p-2 border rounded"
-                    />
-                    <button
-                        type="submit"
-                        className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
-                    >
-                        Send
-                    </button>
-                </form>
-            )} */}
+            {/* DEBUG */}
+            {toggleDebug &&(
+                <>
+                    {isConnected && !isStreaming && (
+                        <form onSubmit={handleCommandSubmit} className="mb-4 flex gap-2">
+                            <input
+                                type="text"
+                                value={inputCommand}
+                                onChange={(e) => setInputCommand(e.target.value)}
+                                placeholder="Enter G-code command (e.g., M115, G28, M114)"
+                                className="flex-1 p-2 border rounded"
+                            />
+                            <button
+                                type="submit"
+                                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded"
+                            >
+                                Send
+                            </button>
+                        </form>
+                    )}
 
 
-            {/* Status */}
-            {/* <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-gray-600">
-                    Status: {isConnected ? `Connected (${serialConfig.baudRate} baud)` : 'Disconnected'}
-                </span>
-                <button
-                    onClick={clearMessages}
-                    className="text-sm text-gray-500 hover:text-gray-700"
-                >
-                    Clear
-                </button>
-            </div> */}
+                    {/* Status */}
+                    <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm text-gray-600">
+                            Status: {isConnected ? `Connected (${serialConfig.baudRate} baud)` : 'Disconnected'}
+                        </span>
+                        <button
+                            onClick={clearMessages}
+                            className="text-sm text-gray-500 hover:text-gray-700"
+                        >
+                            Clear
+                        </button>
+                    </div>
 
-            {/* Console */}
-            {/* <div className="p-3 bg-black text-green-400 rounded max-h-60 overflow-auto font-mono text-sm">
-                {messages.length === 0 ? (
-                    <div className="text-gray-500">No messages yet...</div>
-                ) : (
-                    messages.map((msg, index) => (
-                        <div key={index} className={`mb-1 ${getMessageClass(msg.type)}`}>
-                            <span className="text-gray-400 text-xs">{msg.timestamp}</span> {msg.text}
-                        </div>
-                    ))
-                )}
-            </div> */}
+                    {/* Console */}
+                    <div className="p-3 bg-black text-green-400 rounded max-h-60 overflow-auto font-mono text-sm">
+                        {messages.length === 0 ? (
+                            <div className="text-gray-500">No messages yet...</div>
+                        ) : (
+                            messages.map((msg, index) => (
+                                <div key={index} className={`mb-1 ${getMessageClass(msg.type)}`}>
+                                    <span className="text-gray-400 text-xs">{msg.timestamp}</span> {msg.text}
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </>
+            )}
         </div>
     );
 });
