@@ -8,7 +8,8 @@ class StreamingEngine {
             lastOkTime: null,
             lastBusyTime: null,
             okQueue: [],
-            aborted: false
+            aborted: false,
+            isPaused: false
         };
         this.bufferSize = 4;
         this.timeout = 5000;
@@ -77,10 +78,15 @@ class StreamingEngine {
         let lastBusyTime = Date.now();
         
         while (true) {
+            // Vérifier la pause AVANT tout
+            while (this.state.isPaused) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+    
             if (this.state.aborted) {
                 throw new Error('Streaming aborted');
             }
-
+    
             if (this.state.okQueue.length > 0) {
                 this.state.okQueue.shift();
                 this.state.pendingLines = Math.max(0, this.state.pendingLines - 1);
@@ -143,7 +149,8 @@ class StreamingEngine {
             lastOkTime: Date.now(),
             lastBusyTime: Date.now(),
             okQueue: [],
-            aborted: false
+            aborted: false,
+            isPaused: false
         };
 
         postMessage({
@@ -297,6 +304,16 @@ self.addEventListener('message', (event) => {
 
         case 'INCOMING_LINE':
             engine.processIncomingLine(data.line);
+            break;
+
+        case 'PAUSE':
+            engine.state.isPaused = true;
+            self.postMessage({ type: 'PAUSED' });
+            break;
+
+        case 'RESUME':
+            engine.state.isPaused = false;
+            self.postMessage({ type: 'RESUMED' });
             break;
 
         case 'ABORT':

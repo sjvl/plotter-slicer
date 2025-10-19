@@ -8,6 +8,8 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
     const [isStreaming, setIsStreaming] = useState(false);
     const [streamProgress, setStreamProgress] = useState({ current: 0, total: 0, percent: 0 });
     const [toggleDebug, setToggleDebug] = useState(false)
+    const [isPaused, setIsPaused] = useState(false);
+
 
     const readerRef = useRef(null);
     const abortControllerRef = useRef(null);
@@ -242,24 +244,79 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
             });
         });
     };
+
+    const pauseStreaming = async () => {
+        if (workerRef.current && isStreaming && !isPaused) {
+          try {
+            // D'ABORD mettre en pause le worker
+            workerRef.current.postMessage({ type: 'PAUSE' });
+            setIsPaused(true);
+            addMessage('⏸️ Streaming en pause...', 'info');
+            
+            // Attendre un peu que le worker arrête d'envoyer
+            await new Promise(resolve => setTimeout(resolve, 200));
+            
+            // ENSUITE lever le stylo
+            await sendCommand('M280 P0 S90');
+            addMessage('🖊️ Pen up', 'info');
+          } catch (error) {
+            console.error('Error pausing:', error);
+            addMessage('❌ Erreur lors de la pause', 'error');
+          }
+        }
+    };
+    
+    const resumeStreaming = async () => {
+        if (workerRef.current && isStreaming && isPaused) {
+            try {
+            // D'ABORD rebaisser le stylo
+            await sendCommand('M280 P0 S25');
+            addMessage('🖊️ Pen down', 'info');
+            
+            // Attendre que le stylo descende
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            // ENSUITE reprendre le streaming
+            workerRef.current.postMessage({ type: 'RESUME' });
+            setIsPaused(false);
+            addMessage('▶️ Streaming repris', 'info');
+            } catch (error) {
+            console.error('Error resuming:', error);
+            addMessage('❌ Erreur lors de la reprise', 'error');
+            }
+        }
+    };
     
     // abortStreaming with worker
-    const abortStreaming = () => {
+    const abortStreaming = async () => {
         setStreamProgress({ current: 0, total: 0, percent: 0 });
+        setIsPaused(false);
         
+        // Arrêter le worker
         if (workerRef.current) {
-            workerRef.current.postMessage({ type: 'ABORT' });
-            workerRef.current.terminate();
-            workerRef.current = null;
+          workerRef.current.postMessage({ type: 'ABORT' });
+          workerRef.current.terminate();
+          workerRef.current = null;
         }
         
         setIsStreaming(false);
-        addMessage('Streaming annulé', 'warning');
         
         if (jobAbortControllerRef.current) {
-            jobAbortControllerRef.current.abort();
+          jobAbortControllerRef.current.abort();
+          jobAbortControllerRef.current = null;
         }
-    };
+        
+        // Commandes de sécurité après annulation
+        try {
+          await sendCommand('M280 P0 S90'); // Pen up
+          await new Promise(resolve => setTimeout(resolve, 500)); // Attendre que le stylo se lève
+          await sendCommand('M84'); // Release motors
+          addMessage('⚠️ Job aborted - Pen up & Motors released', 'warning');
+        } catch (error) {
+          console.error('Error sending safety commands:', error);
+          addMessage('Streaming annulé', 'warning');
+        }
+      };
 
 
     // Connexion serial
@@ -448,41 +505,47 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
             <div className="mb-4 grid grid-cols-2 gap-2">
                 {!isStreaming && (
                     <button
-                        onClick={isConnected ? disconnect : connect}
-                        className={`px-4 py-2 rounded ${
-                            isConnected 
-                                ? 'bg-red-500 hover:bg-red-600' 
-                                : 'bg-blue-500 hover:bg-blue-600'
-                        } text-white`}
+                    onClick={isConnected ? disconnect : connect}
+                    className={`px-4 py-2 rounded ${
+                        isConnected 
+                        ? 'bg-red-500 hover:bg-red-600' 
+                        : 'bg-blue-500 hover:bg-blue-600'
+                    } text-white`}
                     >
-                        {isConnected ? 'Disconnect' : 'Connect'}
+                    {isConnected ? 'Disconnect' : 'Connect'}
                     </button>
                 )}
                 
                 {isConnected && !isStreaming && (
                     <button
-                        onClick={sendTestCommands}
-                        className="px-4 py-2 rounded bg-green-500 hover:bg-green-600 text-white"
+                    onClick={sendTestCommands}
+                    className="px-4 py-2 rounded bg-green-500 hover:bg-green-600 text-white"
                     >
-                        Home
+                    Home
                     </button>
                 )}
 
                 {isStreaming && (
+                    <div className="col-span-2 flex gap-2">
+                    <button
+                        onClick={isPaused ? resumeStreaming : pauseStreaming}
+                        className={`flex-1 px-4 py-2 rounded ${
+                        isPaused 
+                            ? 'bg-green-500 hover:bg-green-600' 
+                            : 'bg-yellow-500 hover:bg-yellow-600'
+                        } text-white`}
+                    >
+                        {isPaused ? 'Resume' : 'Pause'}
+                    </button>
+                    
                     <button
                         onClick={abortStreaming}
-                        className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white"
+                        className="flex-1 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded"
                     >
-                        Abort Job
+                        ❌ Abort Job
                     </button>
+                    </div>
                 )}
-
-                <button
-                    onClick={handleDebug}
-                    className="px-4 py-2 rounded bg-red-500 hover:bg-red-600 text-white"
-                >
-                    debug mode
-                </button>
             </div>
 
             
@@ -516,6 +579,12 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
             )}
 
             {/* DEBUG */}
+            <button
+                onClick={handleDebug}
+                className="px-4 py-2 rounded bg-yellow-500 hover:bg-yellow-600 text-white"
+            >
+                debug mode
+            </button>
             {toggleDebug &&(
                 <>
                     {isConnected && !isStreaming && (
