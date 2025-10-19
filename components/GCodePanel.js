@@ -44,7 +44,7 @@ const GCodePanel = ({
                 <div className="flex space-x-2">
                   {/* Bouton Streaming */}
                   <button
-                    className={`flex-1 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                    className={`flex-1 px-4 py-2 rounded text-m transition-colors ${
                       serialConnectionRef?.isConnected && !serialConnectionRef?.isStreaming
                         ? 'bg-green-500 text-white hover:bg-green-600'
                         : 'bg-gray-300 text-gray-500 cursor-not-allowed'
@@ -52,12 +52,12 @@ const GCodePanel = ({
                     onClick={() => onStreamGCode(color, gcode)}
                     disabled={!serialConnectionRef?.isConnected || serialConnectionRef?.isStreaming}
                   >
-                    ⚡ Draw
+                    Draw
                   </button>
 
                   {/* Bouton Download */}
                   <button
-                    className="flex-1 px-3 py-2 rounded text-sm font-medium transition-colors bg-blue-500 text-white hover:bg-blue-600"
+                    className="flex-1 px-4 py-2 rounded text-m transition-colors bg-blue-500 text-white hover:bg-blue-600"
                     onClick={() => onDownloadGCode(color, gcode)}
                   >
                     Download

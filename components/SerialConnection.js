@@ -579,12 +579,14 @@ const SerialConnection = forwardRef(({ onSendGcode }, ref) => {
             )}
 
             {/* DEBUG */}
-            <button
-                onClick={handleDebug}
-                className="px-4 py-2 rounded bg-yellow-500 hover:bg-yellow-600 text-white"
-            >
-                debug mode
-            </button>
+            <div className="mb-4 grid grid-cols-2 gap-2">
+                <button
+                    onClick={handleDebug}
+                    className="px-4 py-2 rounded bg-yellow-500 hover:bg-yellow-600 text-white"
+                >
+                    debug mode
+                </button>
+            </div>
             {toggleDebug &&(
                 <>
                     {isConnected && !isStreaming && (
