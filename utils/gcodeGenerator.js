@@ -413,13 +413,13 @@ export function generateGcode(svgContent, paperConfig, svgViewBox, machineConfig
           
           if (i === 0 && currentType === 'M') {
             if (isPenDown) {
-              gcode.push('M280 P0 S90 T50');
+              gcode.push('M280 P0 S90 T100');
               isPenDown = false;
             }
             gcode.push(`G0 X${transformedPoint.x.toFixed(3)} Y${transformedPoint.y.toFixed(3)} F${travelSpeed}`);
           } else {
             if (!isPenDown) {
-              gcode.push('M280 P0 S25 T50');
+              gcode.push('M280 P0 S25 T100');
               isPenDown = true;
             }
             gcode.push(`G1 X${transformedPoint.x.toFixed(3)} Y${transformedPoint.y.toFixed(3)} F${travelSpeed}`);

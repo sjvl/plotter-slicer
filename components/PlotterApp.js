@@ -6,6 +6,7 @@ import { PAPER_FORMATS, DEFAULT_MACHINE_CONFIG } from '../constants/plotterConfi
 import ControlPanel from './ControlPanel';
 import PreviewCanvas from './PreviewCanvas';
 import GCodePanel from './GCodePanel';
+import CreativeIframeLoader from './CreativeIframeLoader';
 
 import { loadSvgContent as loadSvgContentUtil } from '../utils/svgProcessing';
 import { generateGcode } from '../utils/gcodeGenerator';
@@ -206,6 +207,15 @@ const PlotterApp = () => {
           onDownloadGCode={handleDownloadGCode}
           onFileUpload={handleFileUpload}
         />
+
+
+        <CreativeIframeLoader 
+          onSVGImport={(content, fileName) => {
+            if (fileName) setFileName(fileName);
+            loadSvgContent(content);
+          }} 
+        />
+
       </div>
     </div>
   );
