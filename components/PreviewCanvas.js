@@ -147,23 +147,29 @@ const PreviewCanvas = ({
   // GCodePreview intégré
   const GCodePreview = ({ gcode }) => {
     if (!gcode) return null;
-
+  
     const plotterToSvg = (x, y) => {
-      const correctionX = PLOTTER_WIDTH / paperConfig.width;
-      const correctionY = PLOTTER_HEIGHT / paperConfig.height;
-    
-      const relativeX = (x - PLOTTER_MIN_X) / PLOTTER_WIDTH;
-      const relativeY = (PLOTTER_MAX_Y - y) / PLOTTER_HEIGHT;
-    
-      const paperX = relativeX * paperConfig.width * correctionX;
-      const paperY = relativeY * paperConfig.height * correctionY;
+      // 1. Les coordonnées G-code sont en mm dans le référentiel du plotter
+      // Le plotter a un centre à (0,0) et va de -325 à +325 en X et -500 à +500 en Y
+      
+      // 2. On doit les mapper vers les coordonnées du papier
+      // Le papier est centré sur le canvas et a des dimensions paperConfig.width × paperConfig.height
+      
+      // Position du coin supérieur gauche du papier dans le canvas
+      const paperX = (canvas.width - paperConfig.width) / 2;
+      const paperY = (canvas.height - paperConfig.height) / 2;
+      
+      // Convertir les coordonnées plotter vers les coordonnées papier
+      // Le papier est centré sur (0,0) du plotter
+      const xInPaper = paperConfig.width / 2 + x;
+      const yInPaper = paperConfig.height / 2 - y; // Y inversé
       
       return {
-        x: (canvas.width - paperConfig.width * correctionX) / 2 + paperX,
-        y: (canvas.height - paperConfig.height * correctionY) / 2 + paperY
+        x: paperX + xInPaper,
+        y: paperY + yInPaper
       };
     };
-
+  
     const processGCode = (gcodeContent) => {
       const pathData = gcodeContent.split('\n')
         .filter(line => line.startsWith('G0 ') || line.startsWith('G1 '))
@@ -173,7 +179,7 @@ const PreviewCanvas = ({
           const isMove = line.startsWith('G0');
           return { x, y, isMove };
         });
-
+  
       let path = '';
       pathData.forEach((point, i) => {
         const svgPos = plotterToSvg(point.x, point.y);
@@ -183,10 +189,10 @@ const PreviewCanvas = ({
           path += `L ${svgPos.x} ${svgPos.y} `;
         }
       });
-
+  
       return path;
     };
-
+  
     const gcodeByColor = typeof gcode === 'string' 
       ? { blue: gcode }
       : gcode;
@@ -242,30 +248,30 @@ const PreviewCanvas = ({
           <g transform={`translate(${viewTransform.x} ${viewTransform.y}) scale(${viewTransform.scale})`}>
             {/* Zone de dessin totale du plotter */}
             <rect
-              x={(canvas.width - machineConfig.width) /2}
-              y={(canvas.height - machineConfig.height) /2}
-              width={machineConfig.width}
-              height={machineConfig.height}
+              x={(canvas.width - PLOTTER_WIDTH) / 2}
+              y={(canvas.height - PLOTTER_HEIGHT) / 2}
+              width={PLOTTER_WIDTH}
+              height={PLOTTER_HEIGHT}
               fill="#e9e9e9"
               stroke="gray"
               strokeWidth="0.5"
             />
 
-            {/* Support machine */}
+            {/* Support machine - calculé proportionnellement */}
             <rect
-              x={(canvas.width - machineConfig.width) /2 -30}
-              y={(canvas.height - 1030) /2 - 30}
-              width={machineConfig.width + 60}
+              x={(canvas.width - PLOTTER_WIDTH) / 2 - 30}
+              y={(canvas.height - PLOTTER_HEIGHT) / 2 - 45}
+              width={PLOTTER_WIDTH + 60}
               height={60}
               fill="#c9bca1"
               stroke="grey"
               strokeWidth="0.5"
             />
             
-            {/* Moteurs */}
+            {/* Moteur gauche */}
             <rect
-              x={(canvas.width - machineConfig.width) /2 -25}
-              y={(canvas.height - 1030) /2 - 25}
+              x={(canvas.width - PLOTTER_WIDTH) / 2 - 25}
+              y={(canvas.height - PLOTTER_HEIGHT) / 2 - 40}
               width={50}
               height={70}
               fill="#ab9c7e"
@@ -273,17 +279,23 @@ const PreviewCanvas = ({
               strokeWidth="0.5"
             />
             <rect 
-              x={(canvas.width - machineConfig.width) /2 - 15} 
-              y={(canvas.height - machineConfig.height) /2 - 15} 
+              x={(canvas.width - PLOTTER_WIDTH) / 2 - 15} 
+              y={(canvas.height - PLOTTER_HEIGHT) / 2 - 15} 
               width={30}
               height={30}
               fill="black" 
             />
-            <circle cx={(canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
+            <circle 
+              cx={(canvas.width - PLOTTER_WIDTH) / 2} 
+              cy={(canvas.height - PLOTTER_HEIGHT) / 2} 
+              r="13" 
+              fill="#2463EB" 
+            />
 
+            {/* Moteur droit */}
             <rect
-              x={(canvas.width) -248}
-              y={(canvas.height - 1030) /2 - 25}
+              x={(canvas.width + PLOTTER_WIDTH) / 2 - 25}
+              y={(canvas.height - PLOTTER_HEIGHT) / 2 - 40}
               width={50}
               height={70}
               fill="#ab9c7e"
@@ -291,18 +303,23 @@ const PreviewCanvas = ({
               strokeWidth="0.5"
             />
             <rect 
-              x={canvas.width - (canvas.width - machineConfig.width) /2 - 15} 
-              y={(canvas.height - machineConfig.height) /2 - 15} 
+              x={(canvas.width + PLOTTER_WIDTH) / 2 - 15} 
+              y={(canvas.height - PLOTTER_HEIGHT) / 2 - 15} 
               width={30}
               height={30}
               fill="black" 
             />
-            <circle cx={canvas.width - (canvas.width - machineConfig.width) /2} cy={(canvas.height - machineConfig.height) /2} r="13" fill="#2463EB" />
+            <circle 
+              cx={(canvas.width + PLOTTER_WIDTH) / 2} 
+              cy={(canvas.height - PLOTTER_HEIGHT) / 2} 
+              r="13" 
+              fill="#2463EB" 
+            />
             
-            {/* Ecran + SD */}
+            {/* Ecran + SD - centré horizontalement */}
             <rect
-              x={(canvas.width - 210) / 2 - 150}
-              y={(canvas.height - 1030) /2 - 20}
+              x={(canvas.width - PLOTTER_WIDTH) / 2 + 70}
+              y={(canvas.height - PLOTTER_HEIGHT) / 2 - 35}
               width={150}
               height={40}
               fill="white"
@@ -310,15 +327,20 @@ const PreviewCanvas = ({
               strokeWidth=".5"
             />
             <rect
-              x={(canvas.width - 210) / 2 - 140}
-              y={(canvas.height - 1030) /2 - 15}
+              x={(canvas.width - PLOTTER_WIDTH) / 2 + 80}
+              y={(canvas.height - PLOTTER_HEIGHT) / 2 - 30}
               width={80}
               height={30}
               fill="#2463EB"
               stroke="grey"
               strokeWidth=".5"
             />
-            <circle cx={(canvas.width - 210) / 2 - 15} cy={(canvas.height - 1030) /2} r="6" fill="black" />
+            <circle 
+              cx={(canvas.width - PLOTTER_WIDTH) / 2 + 205} 
+              cy={(canvas.height - PLOTTER_HEIGHT) / 2 -15} 
+              r="6" 
+              fill="black" 
+            />
 
             {/* Papier centré */}
             <rect

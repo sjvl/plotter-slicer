@@ -1,17 +1,16 @@
-// constants/plotterConfig.js
-
-// Dimensions réelles du plotter
-export const PLOTTER_MIN_X = -126.225;
-export const PLOTTER_MAX_X = 126.225;
-export const PLOTTER_MIN_Y = -124.801;
-export const PLOTTER_MAX_Y = 124.801;
-export const PLOTTER_WIDTH = PLOTTER_MAX_X - PLOTTER_MIN_X;  // 252.45
-export const PLOTTER_HEIGHT = PLOTTER_MAX_Y - PLOTTER_MIN_Y; // 249.602
-
+// plotterConfig.js
 export const DEFAULT_MACHINE_CONFIG = {
-    width: 650,
-    height: 1000,
+  width: 300, 
+  height: 500,
 };
+
+// Le système de coordonnées est centré sur (0,0)
+export const PLOTTER_MIN_X = -DEFAULT_MACHINE_CONFIG.width / 2;   // -325
+export const PLOTTER_MAX_X = DEFAULT_MACHINE_CONFIG.width / 2;    // +325
+export const PLOTTER_MIN_Y = -DEFAULT_MACHINE_CONFIG.height / 2;  // -500
+export const PLOTTER_MAX_Y = DEFAULT_MACHINE_CONFIG.height / 2;   // +500
+export const PLOTTER_WIDTH = DEFAULT_MACHINE_CONFIG.width;        // 650
+export const PLOTTER_HEIGHT = DEFAULT_MACHINE_CONFIG.height;      // 1000
 
 // Formats de papier standards
 export const PAPER_FORMATS = {
