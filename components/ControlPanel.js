@@ -14,7 +14,10 @@ const ControlPanel = ({
   onPaperConfigChange,
   selectedFormat,
   onFormatChange,
-  paperFormats
+  paperFormats,
+  selectedMachine,
+  onMachineChange,
+  machineConfigs
 }) => {
   const handleDimensionChange = (dimension, value) => {
     const newConfig = {
@@ -57,6 +60,29 @@ const ControlPanel = ({
         </p>
 
         <div className="space-y-4">
+          {/* MACHINE SELECTION */}
+          <div>
+            <h2 className="text-lg font-bold mb-1 mt-6">Machine</h2>
+            <div className="relative">
+              <select
+                className="w-full p-2 border rounded appearance-none bg-white pr-8"
+                value={selectedMachine}
+                onChange={(e) => onMachineChange(e.target.value)}
+              >
+                {Object.entries(machineConfigs).map(([key, config]) => (
+                  <option key={key} value={key}>
+                    {config.name}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                  <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             {/* SPEED */}
             <div>
@@ -82,40 +108,42 @@ const ControlPanel = ({
                 max="5"
                 step="0.1"
                 value={pointJoiningRadius}
-                onChange={(e) => onPointJoiningRadiusChange(parseFloat(e.target.value))}
+                onChange={(e) => onPointJoiningRadiusChange(Number(e.target.value))}
               />
             </div>
           </div>
-        </div>
 
-        {/* OPTIMIZATION */}
-        <label className="flex items-center cursor-pointer mb-1 mt-6">
-          <input
-            type="checkbox"
-            checked={optimizePaths}
-            onChange={(e) => onOptimizePathsChange(e.target.checked)}
-            className="mr-2 w-4 h-4 accent-gray-600"
-          />
-          <h3>Path Optimization</h3>
-        </label>
+          {/* OPTIMIZE PATHS */}
+          <div className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              id="optimizePaths"
+              className="w-4 h-4"
+              checked={optimizePaths}
+              onChange={(e) => onOptimizePathsChange(e.target.checked)}
+            />
+            <label htmlFor="optimizePaths" className="text-sm">
+              Path Optimization
+            </label>
+          </div>
 
         {/* PAPER */}
         <h2 className="text-lg font-bold mb-1 mt-6">Paper (mm)</h2>
         <div className="space-y-4">
           <div className="relative">
-            <label className="text-xs block mb-1">Format</label>
             <select
-              className="w-full p-2 pr-10 border rounded appearance-none bg-white"
+              className="w-full p-2 border rounded appearance-none bg-white pr-8"
               value={selectedFormat}
               onChange={(e) => handleFormatChange(e.target.value)}
             >
-              <option value="A5">A5 (148×210mm)</option>
-              <option value="A4">A4 (210×297mm)</option>
-              <option value="A3">A3 (297×420mm)</option>
-              <option value="A2">A2 (420×594mm)</option>
+              <option value="A5">A5 (148×210)</option>
+              <option value="A4">A4 (210×297)</option>
+              <option value="A3">A3 (297×420)</option>
+              <option value="A2">A2 (420×594)</option>
+              <option value="B2">B2 (500×707)</option>
               {selectedFormat === 'custom' && <option value="custom">Custom</option>}
             </select>
-            <div className="pointer-events-none absolute right-2 top-8">
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
               <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
                 <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
               </svg>
@@ -202,6 +230,7 @@ const ControlPanel = ({
               />
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>

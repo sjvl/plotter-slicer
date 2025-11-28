@@ -67,8 +67,125 @@ export function simplifyPoints(points, minDistance) {
 /**
  * Calcule le temps estimé pour exécuter un GCode
  */
-export function calculateDrawTime(gcodeContent, travelSpeed) {
-  const travelSpeedMmSec = travelSpeed;
+// export function calculateDrawTime(gcodeContent, travelSpeed) {
+//   const travelSpeedMmSec = travelSpeed;
+  
+//   let travelDistance = 0;
+//   let drawDistance = 0;
+//   let lastX = 0, lastY = 0;
+//   let isPenDown = false;
+//   let penUpDownCount = 0;
+  
+//   const penMoveTime = 0.8;
+//   const adjustmentFactor = 0.00007 * travelSpeed + 0.79;
+//   const acceleration = 800;
+  
+//   const calculateTimeWithAcceleration = (distance, speed) => {
+//     const v = travelSpeedMmSec;
+    
+//     if (distance < 1) {
+//       return distance / (v * 0.5);
+//     }
+    
+//     const accelerationDistance = (v * v) / (2 * acceleration);
+    
+//     if (distance > 2 * accelerationDistance) {
+//       const accelerationTime = v / acceleration;
+//       const constantSpeedTime = (distance - 2 * accelerationDistance) / v;
+//       return 2 * accelerationTime + constantSpeedTime;
+//     } else {
+//       return 2 * Math.sqrt(distance / (2 * acceleration));
+//     }
+//   };
+  
+//   const lines = gcodeContent.split('\n');
+//   let segments = [];
+  
+//   for (const line of lines) {
+//     if (line.includes('M280 P0 S90')) {
+//       if (isPenDown) {
+//         isPenDown = false;
+//         penUpDownCount++;
+//       }
+//       continue;
+//     } else if (line.includes('M280 P0 S25')) {
+//       if (!isPenDown) {
+//         isPenDown = true;
+//         penUpDownCount++;
+//       }
+//       continue;
+//     }
+    
+//     if (line.startsWith('G0') || line.startsWith('G1')) {
+//       const xMatch = line.match(/X(-?\d+\.?\d*)/);
+//       const yMatch = line.match(/Y(-?\d+\.?\d*)/);
+      
+//       if (xMatch && yMatch) {
+//         const x = parseFloat(xMatch[1]);
+//         const y = parseFloat(yMatch[1]);
+        
+//         const distance = Math.sqrt(Math.pow(x - lastX, 2) + Math.pow(y - lastY, 2));
+        
+//         if (distance > 0) {
+//           const isTravel = line.startsWith('G0') || !isPenDown;
+//           segments.push({ distance, isTravel });
+          
+//           if (isTravel) {
+//             travelDistance += distance;
+//           } else {
+//             drawDistance += distance;
+//           }
+//         }
+        
+//         lastX = x;
+//         lastY = y;
+//       }
+//     }
+//   }
+  
+//   let travelTime = 0;
+//   let drawTime = 0;
+  
+//   for (const segment of segments) {
+//     if (segment.isTravel) {
+//       travelTime += calculateTimeWithAcceleration(segment.distance, travelSpeedMmSec);
+//     } else {
+//       drawTime += calculateTimeWithAcceleration(segment.distance, travelSpeedMmSec);
+//     }
+//   }
+  
+//   const penOperationTime = penUpDownCount * penMoveTime;
+  
+//   const userPauses = gcodeContent.match(/M0/g);
+//   const userPauseCount = userPauses ? userPauses.length : 0;
+//   const userPauseTime = userPauseCount > 0 ? 30 : 0;
+  
+//   const calculatedTimeSeconds = (travelTime + drawTime + penOperationTime) * adjustmentFactor + userPauseTime;
+//   const totalTimeSeconds = Math.ceil(calculatedTimeSeconds);
+  
+//   const hours = Math.floor(totalTimeSeconds / 3600);
+//   const minutes = Math.floor((totalTimeSeconds % 3600) / 60);
+//   const seconds = Math.floor(totalTimeSeconds % 60);
+  
+//   return {
+//     totalTimeSeconds,
+//     formattedTime: `${hours > 0 ? hours + 'h ' : ''}${minutes}min ${seconds}s`,
+//     details: {
+//       travelDistance: travelDistance.toFixed(2) + ' mm',
+//       drawDistance: drawDistance.toFixed(2) + ' mm',
+//       travelTime: (travelTime / 60).toFixed(2) + ' min',
+//       drawTime: (drawTime / 60).toFixed(2) + ' min',
+//       penOperations: penUpDownCount,
+//       penOperationTime: (penOperationTime / 60).toFixed(2) + ' min',
+//       userPauses: userPauseCount
+//     }
+//   };
+// }
+// Extrait du fichier à corriger - fonction calculateDrawTime
+
+export function calculateDrawTime(gcodeContent, travelSpeedMmMin) {
+  // travelSpeedMmMin est en mm/min (comme dans le gcode), on le convertit en mm/s
+  const speedMmPerSec = travelSpeedMmMin / 60;
   
   let travelDistance = 0;
   let drawDistance = 0;
@@ -76,25 +193,22 @@ export function calculateDrawTime(gcodeContent, travelSpeed) {
   let isPenDown = false;
   let penUpDownCount = 0;
   
-  const penMoveTime = 0.8;
-  const adjustmentFactor = 0.00007 * travelSpeed + 0.79;
-  const acceleration = 800;
+  const penMoveTime = 0.8; // secondes par mouvement de stylo
+  const acceleration = 800; // mm/s²
   
-  const calculateTimeWithAcceleration = (distance, speed) => {
-    const v = travelSpeedMmSec;
-    
+  const calculateTimeWithAcceleration = (distance) => {
     if (distance < 1) {
-      return distance / (v * 0.5);
+      return distance / (speedMmPerSec * 0.5);
     }
     
-    const accelerationDistance = (v * v) / (2 * acceleration);
+    const accelerationDistance = (speedMmPerSec * speedMmPerSec) / (2 * acceleration);
     
     if (distance > 2 * accelerationDistance) {
-      const accelerationTime = v / acceleration;
-      const constantSpeedTime = (distance - 2 * accelerationDistance) / v;
+      const accelerationTime = speedMmPerSec / acceleration;
+      const constantSpeedTime = (distance - 2 * accelerationDistance) / speedMmPerSec;
       return 2 * accelerationTime + constantSpeedTime;
     } else {
-      return 2 * Math.sqrt(distance / (2 * acceleration));
+      return 2 * Math.sqrt(distance / acceleration);
     }
   };
   
@@ -147,10 +261,11 @@ export function calculateDrawTime(gcodeContent, travelSpeed) {
   let drawTime = 0;
   
   for (const segment of segments) {
+    const segmentTime = calculateTimeWithAcceleration(segment.distance);
     if (segment.isTravel) {
-      travelTime += calculateTimeWithAcceleration(segment.distance, travelSpeedMmSec);
+      travelTime += segmentTime;
     } else {
-      drawTime += calculateTimeWithAcceleration(segment.distance, travelSpeedMmSec);
+      drawTime += segmentTime;
     }
   }
   
@@ -160,8 +275,7 @@ export function calculateDrawTime(gcodeContent, travelSpeed) {
   const userPauseCount = userPauses ? userPauses.length : 0;
   const userPauseTime = userPauseCount > 0 ? 30 : 0;
   
-  const calculatedTimeSeconds = (travelTime + drawTime + penOperationTime) * adjustmentFactor + userPauseTime;
-  const totalTimeSeconds = Math.ceil(calculatedTimeSeconds);
+  const totalTimeSeconds = Math.ceil(travelTime + drawTime + penOperationTime + userPauseTime);
   
   const hours = Math.floor(totalTimeSeconds / 3600);
   const minutes = Math.floor((totalTimeSeconds % 3600) / 60);

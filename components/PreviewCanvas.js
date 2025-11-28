@@ -1,7 +1,6 @@
 // components/PreviewCanvas.js
 
 import React, { useEffect, useRef } from 'react';
-import { PLOTTER_MIN_X, PLOTTER_MAX_Y, PLOTTER_WIDTH, PLOTTER_HEIGHT } from '../constants/plotterConfig';
 
 const PreviewCanvas = ({
   canvas,
@@ -23,6 +22,8 @@ const PreviewCanvas = ({
   handleDrop
 }) => {
   const svgRef = useRef(null);
+  const PLOTTER_WIDTH = machineConfig.width;
+  const PLOTTER_HEIGHT = machineConfig.height;
 
   const calculateDrawingArea = () => {
     const width = paperConfig.width - paperConfig.marginLeft - paperConfig.marginRight;

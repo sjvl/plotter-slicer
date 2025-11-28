@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDragAndDrop } from '../hooks/useDragAndDrop';
 
-import { PAPER_FORMATS, DEFAULT_MACHINE_CONFIG } from '../constants/plotterConfig';
+import { PAPER_FORMATS, MACHINE_CONFIGS, DEFAULT_MACHINE_CONFIG } from '../constants/plotterConfig';
 
 import ControlPanel from './ControlPanel';
 import PreviewCanvas from './PreviewCanvas';
@@ -13,17 +13,23 @@ import { generateGcode } from '../utils/gcodeGenerator';
 
 const PlotterApp = () => {
   // ========== CONFIG ==========
+  const paperFormats = PAPER_FORMATS;
+  const DEFAULT_PAPER_FORMAT = 'A5'; // Format par défaut
+  
+  const [selectedFormat, setSelectedFormat] = useState(DEFAULT_PAPER_FORMAT);
   const [paperConfig, setPaperConfig] = useState({
-    width: 297,
-    height: 420,
+    width: PAPER_FORMATS[DEFAULT_PAPER_FORMAT].width,
+    height: PAPER_FORMATS[DEFAULT_PAPER_FORMAT].height,
     marginTop: 0,
     marginRight: 0,
     marginBottom: 0,
     marginLeft: 0
   });
-  const [selectedFormat, setSelectedFormat] = useState('A3');
-  const paperFormats = PAPER_FORMATS;
-  const [machineConfig] = useState(DEFAULT_MACHINE_CONFIG);
+  
+  // Ajout de la sélection de machine
+  const [selectedMachine, setSelectedMachine] = useState('A5');
+  const [machineConfig, setMachineConfig] = useState(DEFAULT_MACHINE_CONFIG);
+  
   const [canvas] = useState({
     width: 1100,
     height: 1100,
@@ -47,7 +53,8 @@ const PlotterApp = () => {
     pointJoiningRadius,
     optimizePaths,
     speedSettings,
-    paperConfig
+    paperConfig,
+    machineConfig
   });
   const [generatedGcode, setGeneratedGcode] = useState(null);
   const [timeEstimations, setTimeEstimations] = useState({});
@@ -64,6 +71,13 @@ const PlotterApp = () => {
   // ========== SERIAL ==========
   const [serialConnectionRef, setSerialConnectionRef] = useState(null);
 
+  // Handler pour changer de machine
+  const handleMachineChange = (machineType) => {
+    setSelectedMachine(machineType);
+    setMachineConfig(MACHINE_CONFIGS[machineType]);
+    // Reset du gcode car les dimensions ont changé
+    setGeneratedGcode(null);
+  };
 
   const handleStreamGCode = async (color, gcode) => {    
     const baseFilename = fileName || 'output';
@@ -109,7 +123,7 @@ const PlotterApp = () => {
       machineConfig,
       optimizePaths,
       pointJoiningRadius,
-      speedSettings  // ← Ajouter ce paramètre
+      speedSettings
     );
     
     setGeneratedGcode(result.gcodeByColor);
@@ -137,17 +151,18 @@ const PlotterApp = () => {
         pointJoiningRadius,
         optimizePaths,
         speedSettings,
-        paperConfig
+        paperConfig,
+        machineConfig
       });
     }, 500); // Attendre 500ms après le dernier changement
   
     return () => clearTimeout(timer);
-  }, [pointJoiningRadius, optimizePaths, speedSettings, paperConfig]);
+  }, [pointJoiningRadius, optimizePaths, speedSettings, paperConfig, machineConfig]);
 
   // Reset du gcode quand la config change
   useEffect(() => {
     setGeneratedGcode(null);
-  }, [svgContent, paperConfig, speedSettings, pointJoiningRadius, optimizePaths]); 
+  }, [svgContent, paperConfig, speedSettings, pointJoiningRadius, optimizePaths, machineConfig]); 
 
   useEffect(() => {
     setGeneratedGcode(null);
@@ -173,6 +188,9 @@ const PlotterApp = () => {
           selectedFormat={selectedFormat}
           onFormatChange={setSelectedFormat}
           paperFormats={paperFormats}
+          selectedMachine={selectedMachine}
+          onMachineChange={handleMachineChange}
+          machineConfigs={MACHINE_CONFIGS}
         />
   
         {/* Prévisualisation */}
