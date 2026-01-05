@@ -1,6 +1,6 @@
 // utils/gcodeGenerator.js
 
-import { normalizeColor } from './svgProcessing';
+import { normalizeColor, getStrokeColor } from './svgProcessing'; // ✅ AJOUTER getStrokeColor
 import { 
     PLOTTER_MIN_X, 
     PLOTTER_MAX_X, 
@@ -458,8 +458,9 @@ export function generateGcode(svgContent, paperConfig, svgViewBox, machineConfig
   // Regrouper les paths par couleur
   const pathsByColor = {};
   doc.querySelectorAll('path').forEach(path => {
-    const stroke = path.getAttribute('stroke');
-    const color = stroke ? normalizeColor(stroke) : 'black';
+    // const stroke = path.getAttribute('stroke');
+    // const color = stroke ? normalizeColor(stroke) : 'black';
+    const color = getStrokeColor(path);
     
     if (!pathsByColor[color]) {
       pathsByColor[color] = [];

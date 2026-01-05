@@ -6,147 +6,161 @@
  * @returns {string} Nom de la couleur de base la plus proche
  */
 export function normalizeColor(color) {
-    // Base de couleurs de référence avec leurs valeurs RGB
-    const baseColors = {
-      black: [0, 0, 0],
-      white: [255, 255, 255],
-      red: [255, 0, 0],
-      green: [0, 128, 0],
-      blue: [0, 0, 255],
-      yellow: [255, 255, 0],
-      purple: [128, 0, 128],
-      orange: [255, 165, 0],
-      brown: [165, 42, 42],
-      pink: [255, 192, 203],
-      gray: [128, 128, 128],
-      cyan: [0, 255, 255],
-      magenta: [255, 0, 255],
-    };
-  
-    // Fonction interne pour convertir hex en RGB
-    function hexToRgb(hex) {
-      const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
-      hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
-      
-      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-      return result ? [
-        parseInt(result[1], 16),
-        parseInt(result[2], 16),
-        parseInt(result[3], 16)
-      ] : null;
-    }
-  
-    // Fonction interne pour convertir hsl en RGB
-    function hslToRgb(h, s, l) {
-      h /= 360;
-      s /= 100;
-      l /= 100;
-      
-      function hue2rgb(p, q, t) {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-      }
-  
-      let r, g, b;
-      if (s === 0) {
-        r = g = b = l;
-      } else {
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1/3);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1/3);
-      }
-  
-      return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
-    }
-  
-    // Traitement principal
-    try {
-      // Nettoyer l'entrée
-      const normalizedInput = color.toLowerCase().trim();
-  
-      // Si c'est déjà un nom de couleur de base, le retourner
-      if (baseColors.hasOwnProperty(normalizedInput)) {
-        return normalizedInput;
-      }
-  
-      // Convertir la couleur en RGB selon son format
-      let rgb;
-  
-      if (normalizedInput.startsWith('#')) {
-        // Format hexadécimal
-        rgb = hexToRgb(normalizedInput);
-      } 
-      else if (normalizedInput.startsWith('rgb')) {
-        // Format RGB/RGBA
-        const values = normalizedInput.match(/\d+/g);
-        rgb = values ? values.slice(0, 3).map(Number) : null;
-      }
-      else if (normalizedInput.startsWith('hsl')) {
-        // Format HSL/HSLA
-        const values = normalizedInput.match(/\d+/g);
-        if (values) {
-          const [h, s, l] = values.map(Number);
-          rgb = hslToRgb(h, s, l);
-        }
-      }
-  
-      // Si la conversion a échoué, retourner noir par défaut
-      if (!rgb) return 'black';
-  
-      // Trouver la couleur de base la plus proche
-      let closestColor = 'black';
-      let minDistance = Infinity;
-  
-      for (const [name, values] of Object.entries(baseColors)) {
-        const distance = Math.sqrt(
-          Math.pow(rgb[0] - values[0], 2) +
-          Math.pow(rgb[1] - values[1], 2) +
-          Math.pow(rgb[2] - values[2], 2)
-        );
-  
-        if (distance < minDistance) {
-          minDistance = distance;
-          closestColor = name;
-        }
-      }
-  
-      return closestColor;
-    } catch (error) {
-      console.warn('Color normalization failed:', error);
-      return 'black'; // Valeur par défaut en cas d'erreur
-    }
+  // Base de couleurs de référence avec leurs valeurs RGB
+  const baseColors = {
+    black: [0, 0, 0],
+    white: [255, 255, 255],
+    red: [255, 0, 0],
+    green: [0, 128, 0],
+    blue: [0, 0, 255],
+    yellow: [255, 255, 0],
+    purple: [128, 0, 128],
+    orange: [255, 165, 0],
+    brown: [165, 42, 42],
+    pink: [255, 192, 203],
+    gray: [128, 128, 128],
+    cyan: [0, 255, 255],
+    magenta: [255, 0, 255],
+  };
+
+  // Fonction interne pour convertir hex en RGB
+  function hexToRgb(hex) {
+    const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
+    hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
+    
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? [
+      parseInt(result[1], 16),
+      parseInt(result[2], 16),
+      parseInt(result[3], 16)
+    ] : null;
   }
-  
-  /**
-   * Extrait la couleur de stroke d'un élément SVG
-   * @param {Element} element - Élément SVG
-   * @returns {string} Nom de la couleur normalisée
-   */
-  export function getStrokeColor(element) {
+
+  // Fonction interne pour convertir hsl en RGB
+  function hslToRgb(h, s, l) {
+    h /= 360;
+    s /= 100;
+    l /= 100;
+    
+    function hue2rgb(p, q, t) {
+      if (t < 0) t += 1;
+      if (t > 1) t -= 1;
+      if (t < 1/6) return p + (q - p) * 6 * t;
+      if (t < 1/2) return q;
+      if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+      return p;
+    }
+
+    let r, g, b;
+    if (s === 0) {
+      r = g = b = l;
+    } else {
+      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+      const p = 2 * l - q;
+      r = hue2rgb(p, q, h + 1/3);
+      g = hue2rgb(p, q, h);
+      b = hue2rgb(p, q, h - 1/3);
+    }
+
+    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
+  }
+
+  // Traitement principal
+  try {
+    // Nettoyer l'entrée
+    const normalizedInput = color.toLowerCase().trim();
+
+    // Si c'est déjà un nom de couleur de base, le retourner
+    if (baseColors.hasOwnProperty(normalizedInput)) {
+      return normalizedInput;
+    }
+
+    // Convertir la couleur en RGB selon son format
+    let rgb;
+
+    if (normalizedInput.startsWith('#')) {
+      // Format hexadécimal
+      rgb = hexToRgb(normalizedInput);
+    } 
+    else if (normalizedInput.startsWith('rgb')) {
+      // Format RGB/RGBA
+      const values = normalizedInput.match(/\d+/g);
+      rgb = values ? values.slice(0, 3).map(Number) : null;
+    }
+    else if (normalizedInput.startsWith('hsl')) {
+      // Format HSL/HSLA
+      const values = normalizedInput.match(/\d+/g);
+      if (values) {
+        const [h, s, l] = values.map(Number);
+        rgb = hslToRgb(h, s, l);
+      }
+    }
+
+    // Si la conversion a échoué, retourner noir par défaut
+    if (!rgb) return 'black';
+
+    // Trouver la couleur de base la plus proche
+    let closestColor = 'black';
+    let minDistance = Infinity;
+
+    for (const [name, values] of Object.entries(baseColors)) {
+      const distance = Math.sqrt(
+        Math.pow(rgb[0] - values[0], 2) +
+        Math.pow(rgb[1] - values[1], 2) +
+        Math.pow(rgb[2] - values[2], 2)
+      );
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestColor = name;
+      }
+    }
+
+    return closestColor;
+  } catch (error) {
+    console.warn('Color normalization failed:', error);
+    return 'black'; // Valeur par défaut en cas d'erreur
+  }
+}
+
+/**
+* Extrait la couleur de stroke d'un élément SVG en remontant l'arbre DOM
+* @param {Element} element - Élément SVG
+* @returns {string} Nom de la couleur normalisée
+*/
+export function getStrokeColor(element) {
+  let currentElement = element;
+
+  // Remonter l'arbre DOM jusqu'à trouver un stroke ou atteindre la racine
+  while (currentElement && currentElement.tagName !== 'svg') {
     // Vérifier d'abord le style inline
-    const style = element.getAttribute('style');
+    const style = currentElement.getAttribute('style');
     if (style) {
       const strokeMatch = style.match(/stroke:\s*([^;]+)/);
-      if (strokeMatch) return normalizeColor(strokeMatch[1]);
+      if (strokeMatch && strokeMatch[1] !== 'none') {
+        return normalizeColor(strokeMatch[1]);
+      }
     }
     
     // Ensuite vérifier l'attribut stroke
-    const stroke = element.getAttribute('stroke');
-    if (stroke) return normalizeColor(stroke);
+    const stroke = currentElement.getAttribute('stroke');
+    if (stroke && stroke !== 'none') {
+      return normalizeColor(stroke);
+    }
     
-    // Si pas de stroke mais un fill, utiliser le fill
-    const fill = element.getAttribute('fill');
-    if (fill && fill !== 'none') return normalizeColor(fill);
-    
-    // Par défaut, noir
-    return 'black';
+    // Remonter au parent
+    currentElement = currentElement.parentElement;
   }
+
+  // Si pas de stroke mais un fill, essayer le fill de l'élément original
+  const fill = element.getAttribute('fill');
+  if (fill && fill !== 'none') {
+    return normalizeColor(fill);
+  }
+
+  // Par défaut, noir
+  return 'black';
+}
   
   /**
    * Calcule un point sur une courbe de Bézier cubique
