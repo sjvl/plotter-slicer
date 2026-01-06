@@ -8,19 +8,69 @@
 export function normalizeColor(color) {
   // Base de couleurs de référence avec leurs valeurs RGB
   const baseColors = {
+    // Noirs et gris
     black: [0, 0, 0],
-    white: [255, 255, 255],
-    red: [255, 0, 0],
-    green: [0, 128, 0],
-    blue: [0, 0, 255],
-    yellow: [255, 255, 0],
-    purple: [128, 0, 128],
-    orange: [255, 165, 0],
-    brown: [165, 42, 42],
-    pink: [255, 192, 203],
+    darkgray: [64, 64, 64],
     gray: [128, 128, 128],
+    lightgray: [192, 192, 192],
+    white: [255, 255, 255],
+    
+    // Rouges
+    darkred: [139, 0, 0],
+    red: [255, 0, 0],
+    lightred: [255, 102, 102],
+    crimson: [220, 20, 60],
+    
+    // Roses
+    darkpink: [255, 105, 180],
+    pink: [255, 192, 203],
+    lightpink: [255, 182, 193],
+    
+    // Oranges
+    darkorange: [255, 140, 0],
+    orange: [255, 165, 0],
+    lightorange: [255, 200, 124],
+    coral: [255, 127, 80],
+    
+    // Jaunes
+    darkyellow: [204, 204, 0],
+    yellow: [255, 255, 0],
+    lightyellow: [255, 255, 224],
+    gold: [255, 215, 0],
+    
+    // Verts
+    darkgreen: [0, 100, 0],
+    green: [0, 128, 0],
+    lightgreen: [144, 238, 144],
+    lime: [0, 255, 0],
+    olive: [128, 128, 0],
+    
+    // Cyans
+    darkcyan: [0, 139, 139],
     cyan: [0, 255, 255],
+    lightcyan: [224, 255, 255],
+    teal: [0, 128, 128],
+    
+    // Bleus
+    darkblue: [0, 0, 139],
+    blue: [0, 0, 255],
+    lightblue: [173, 216, 230],
+    navy: [0, 0, 128],
+    skyblue: [135, 206, 235],
+    
+    // Violets/Pourpres
+    darkpurple: [75, 0, 130],
+    purple: [128, 0, 128],
+    lightpurple: [216, 191, 216],
+    violet: [238, 130, 238],
     magenta: [255, 0, 255],
+    
+    // Marrons
+    darkbrown: [101, 67, 33],
+    brown: [165, 42, 42],
+    lightbrown: [205, 133, 63],
+    tan: [210, 180, 140],
+    beige: [245, 245, 220]
   };
 
   // Fonction interne pour convertir hex en RGB
