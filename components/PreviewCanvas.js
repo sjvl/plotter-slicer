@@ -200,16 +200,23 @@ const PreviewCanvas = ({
   
     return (
       <>
-        {Object.entries(gcodeByColor).map(([color, colorGcode]) => (
-          <path 
+        {Object.entries(gcodeByColor).map(([color, colorGcode]) => {
+          const COLOR_HEX = {
+            black: '#000000', white: '#808080', gray: '#808080',
+            red: '#FF0000', orange: '#FFA500', yellow: '#FFFF00',
+            green: '#008000', blue: '#0000FF', purple: '#800080',
+            pink: '#FF69B4', brown: '#8B4513',
+          };
+          return (
+          <path
             key={color}
-            d={processGCode(colorGcode)} 
-            fill="none" 
-            stroke="blue" 
-            strokeWidth="1" 
-            opacity=".6"
-          />
-        ))}
+            d={processGCode(colorGcode)}
+            fill="none"
+            stroke={COLOR_HEX[color] || '#000000'}
+            strokeWidth="0.4"
+            opacity="0.7"
+          />);
+        })}
       </>
     );
   };
@@ -366,7 +373,7 @@ const PreviewCanvas = ({
               strokeWidth=".5"
             />
 
-            {svgContent && (
+            {svgContent && !generatedGcode && (
               <g transform={calculateSvgTransform()}>
                 <g dangerouslySetInnerHTML={{ 
                   __html: svgContent.replace(/<svg[^>]*>|<\/svg>/g, '')

@@ -1,83 +1,33 @@
 // utils/svgProcessing.js
 
 /**
- * Normalise une couleur en nom de couleur de base
- * @param {string} color - Couleur au format hex, rgb, hsl ou nom
- * @returns {string} Nom de la couleur de base la plus proche
+ * Normalise une couleur en famille de couleur simplifiée (basée sur la teinte HSL)
+ * @param {string} color - Couleur au format hex, rgb, hsl ou nom CSS
+ * @returns {string} Famille de couleur : black, white, gray, red, orange, yellow, green, blue, purple, pink, brown
  */
 export function normalizeColor(color) {
-  // Base de couleurs de référence avec leurs valeurs RGB
-  const baseColors = {
-    // Noirs et gris
-    black: [0, 0, 0],
-    darkgray: [64, 64, 64],
-    gray: [128, 128, 128],
-    lightgray: [192, 192, 192],
-    white: [255, 255, 255],
-    
-    // Rouges
-    darkred: [139, 0, 0],
-    red: [255, 0, 0],
-    lightred: [255, 102, 102],
-    crimson: [220, 20, 60],
-    
-    // Roses
-    darkpink: [255, 105, 180],
-    pink: [255, 192, 203],
-    lightpink: [255, 182, 193],
-    
-    // Oranges
-    darkorange: [255, 140, 0],
-    orange: [255, 165, 0],
-    lightorange: [255, 200, 124],
-    coral: [255, 127, 80],
-    
-    // Jaunes
-    darkyellow: [204, 204, 0],
-    yellow: [255, 255, 0],
-    lightyellow: [255, 255, 224],
-    gold: [255, 215, 0],
-    
-    // Verts
-    darkgreen: [0, 100, 0],
-    green: [0, 128, 0],
-    lightgreen: [144, 238, 144],
-    lime: [0, 255, 0],
-    olive: [128, 128, 0],
-    
-    // Cyans
-    darkcyan: [0, 139, 139],
-    cyan: [0, 255, 255],
-    lightcyan: [224, 255, 255],
-    teal: [0, 128, 128],
-    
-    // Bleus
-    darkblue: [0, 0, 139],
-    blue: [0, 0, 255],
-    lightblue: [173, 216, 230],
-    navy: [0, 0, 128],
-    skyblue: [135, 206, 235],
-    
-    // Violets/Pourpres
-    darkpurple: [75, 0, 130],
-    purple: [128, 0, 128],
-    lightpurple: [216, 191, 216],
-    violet: [238, 130, 238],
-    magenta: [255, 0, 255],
-    
-    // Marrons
-    darkbrown: [101, 67, 33],
-    brown: [165, 42, 42],
-    lightbrown: [205, 133, 63],
-    tan: [210, 180, 140],
-    beige: [245, 245, 220]
+  // Noms CSS courants → RGB (pour les SVG qui utilisent des noms de couleur)
+  const cssNamedColors = {
+    black: [0,0,0], white: [255,255,255], red: [255,0,0],
+    green: [0,128,0], blue: [0,0,255], yellow: [255,255,0],
+    orange: [255,165,0], purple: [128,0,128], pink: [255,192,203],
+    gray: [128,128,128], grey: [128,128,128], brown: [165,42,42],
+    cyan: [0,255,255], magenta: [255,0,255], navy: [0,0,128],
+    teal: [0,128,128], lime: [0,255,0], olive: [128,128,0],
+    coral: [255,127,80], crimson: [220,20,60], gold: [255,215,0],
+    violet: [238,130,238], beige: [245,245,220], tan: [210,180,140],
+    darkred: [139,0,0], darkgreen: [0,100,0], darkblue: [0,0,139],
+    darkgray: [169,169,169], darkgrey: [169,169,169],
+    lightgray: [211,211,211], lightgrey: [211,211,211],
+    lightblue: [173,216,230], lightgreen: [144,238,144],
+    skyblue: [135,206,235], hotpink: [255,105,180],
+    indigo: [75,0,130], maroon: [128,0,0], aqua: [0,255,255],
+    salmon: [250,128,114], sienna: [160,82,45], khaki: [240,230,140],
   };
 
-  // Fonction interne pour convertir hex en RGB
   function hexToRgb(hex) {
     const shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
     hex = hex.replace(shorthandRegex, (m, r, g, b) => r + r + g + g + b + b);
-    
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? [
       parseInt(result[1], 16),
@@ -86,12 +36,8 @@ export function normalizeColor(color) {
     ] : null;
   }
 
-  // Fonction interne pour convertir hsl en RGB
   function hslToRgb(h, s, l) {
-    h /= 360;
-    s /= 100;
-    l /= 100;
-    
+    h /= 360; s /= 100; l /= 100;
     function hue2rgb(p, q, t) {
       if (t < 0) t += 1;
       if (t > 1) t -= 1;
@@ -100,7 +46,6 @@ export function normalizeColor(color) {
       if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
       return p;
     }
-
     let r, g, b;
     if (s === 0) {
       r = g = b = l;
@@ -111,65 +56,69 @@ export function normalizeColor(color) {
       g = hue2rgb(p, q, h);
       b = hue2rgb(p, q, h - 1/3);
     }
-
     return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255)];
   }
 
-  // Traitement principal
+  function rgbToHsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    if (max === min) return [0, 0, l * 100];
+    const d = max - min;
+    const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    let h;
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+    return [h * 360, s * 100, l * 100];
+  }
+
+  function classifyByHue(h, s, l) {
+    // 1. Noir et blanc en priorité (indépendamment de la teinte et saturation)
+    if (l < 25) return 'black';
+    if (l > 90) return 'white';
+    // 2. Gris (saturation très faible)
+    if (s < 12) return 'gray';
+    // 3. Brown : teinte chaude, saturation modérée, luminosité basse
+    if (h >= 15 && h < 45 && s < 60 && l < 40) return 'brown';
+    // 4. Classification par teinte
+    if (h < 15 || h >= 345) return 'red';
+    if (h < 45)  return 'orange';
+    if (h < 65)  return 'yellow';
+    if (h < 170) return 'green';
+    if (h < 260) return 'blue';
+    if (h < 290) return 'purple';
+    return 'pink'; // 290-345
+  }
+
   try {
-    // Nettoyer l'entrée
     const normalizedInput = color.toLowerCase().trim();
 
-    // Si c'est déjà un nom de couleur de base, le retourner
-    if (baseColors.hasOwnProperty(normalizedInput)) {
-      return normalizedInput;
-    }
-
-    // Convertir la couleur en RGB selon son format
+    // Convertir en RGB selon le format
     let rgb;
 
     if (normalizedInput.startsWith('#')) {
-      // Format hexadécimal
       rgb = hexToRgb(normalizedInput);
-    } 
-    else if (normalizedInput.startsWith('rgb')) {
-      // Format RGB/RGBA
+    } else if (normalizedInput.startsWith('rgb')) {
       const values = normalizedInput.match(/\d+/g);
       rgb = values ? values.slice(0, 3).map(Number) : null;
-    }
-    else if (normalizedInput.startsWith('hsl')) {
-      // Format HSL/HSLA
+    } else if (normalizedInput.startsWith('hsl')) {
       const values = normalizedInput.match(/\d+/g);
       if (values) {
         const [h, s, l] = values.map(Number);
         rgb = hslToRgb(h, s, l);
       }
+    } else if (cssNamedColors[normalizedInput]) {
+      rgb = cssNamedColors[normalizedInput];
     }
 
-    // Si la conversion a échoué, retourner noir par défaut
     if (!rgb) return 'black';
 
-    // Trouver la couleur de base la plus proche
-    let closestColor = 'black';
-    let minDistance = Infinity;
-
-    for (const [name, values] of Object.entries(baseColors)) {
-      const distance = Math.sqrt(
-        Math.pow(rgb[0] - values[0], 2) +
-        Math.pow(rgb[1] - values[1], 2) +
-        Math.pow(rgb[2] - values[2], 2)
-      );
-
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestColor = name;
-      }
-    }
-
-    return closestColor;
+    const [h, s, l] = rgbToHsl(rgb[0], rgb[1], rgb[2]);
+    return classifyByHue(h, s, l);
   } catch (error) {
     console.warn('Color normalization failed:', error);
-    return 'black'; // Valeur par défaut en cas d'erreur
+    return 'black';
   }
 }
 
