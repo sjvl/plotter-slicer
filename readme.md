@@ -55,6 +55,11 @@ Un fichier séparé est créé pour chaque couleur détectée.
 2. Sélectionner le port série de votre plotter
 3. Utiliser les boutons "⚡ Draw" pour lancer le dessin
 
+### 6. Utiliser des outils génératifs (optionnel)
+1. Ajouter un paramètre query de type ?url=mon-projet.com
+2. par exemple ?url=https://plotobooth.vercel.app/
+3. Si votre projet permet de télécharger un svg, il sera automatiquement inséré dans le slicer
+
 ---
 
 ## 🔧 Structure du projet
